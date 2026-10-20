@@ -1,5 +1,7 @@
 import { Controller, type Control, type FieldPath, type FieldValues } from 'react-hook-form';
 
+import { formatMoneyInput, parseMoneyInput } from '@/utils/money';
+
 import { ChipSelect, type ChipOption } from './ChipSelect';
 import { DatePicker, type DatePickerProps } from './DatePicker';
 import { FormField } from './FormField';
@@ -35,6 +37,37 @@ export function ControlledTextInput<T extends FieldValues>({
             {...input}
             value={field.value == null ? '' : String(field.value)}
             onChangeText={field.onChange}
+            onBlur={field.onBlur}
+            error={fieldState.error != null}
+          />
+        </FormField>
+      )}
+    />
+  );
+}
+
+/** A `TextInput` for ₫ amounts: groups thousands with `.` while typing, stores the raw `1234.5`. */
+export function ControlledMoneyInput<T extends FieldValues>({
+  control,
+  name,
+  label,
+  required,
+  hint,
+  ...input
+}: BoundBase<T> & Omit<TextInputProps, 'value' | 'onChangeText' | 'error'>) {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <FormField label={label} required={required} hint={hint} error={fieldState.error?.message}>
+          <TextInput
+            accessibilityLabel={label}
+            keyboardType="decimal-pad"
+            suffix="₫"
+            {...input}
+            value={formatMoneyInput(field.value == null ? '' : String(field.value))}
+            onChangeText={(text) => field.onChange(parseMoneyInput(text))}
             onBlur={field.onBlur}
             error={fieldState.error != null}
           />

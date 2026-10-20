@@ -4,6 +4,12 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.c
 /** Serve the Phase 2 fixtures from an in-memory axios adapter instead of the real backend. */
 export const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK !== 'false';
 
+/**
+ * Dev-only sign-in token for a real backend running with `APP_ENV=dev`: `dev:demo` is the seeded
+ * household, `dev:<anything>` a fresh empty one. Ignored in release builds.
+ */
+export const DEV_ID_TOKEN = process.env.EXPO_PUBLIC_DEV_ID_TOKEN;
+
 /** Simulated network latency of the mock adapter, in ms. */
 export const MOCK_LATENCY_MS = process.env.NODE_ENV === 'test' ? 0 : 250;
 
