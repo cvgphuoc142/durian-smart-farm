@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Durian Farm",
+    "slug": "durianMobile",
+    "scheme": "durian",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.durianfarm.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Ứng dụng cần dùng camera để chụp ảnh cây, lá, trái và nhận diện bệnh.",
+        "NSPhotoLibraryUsageDescription": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh cây trồng và hóa đơn."
+      }
+    },
+    "android": {
+      "package": "com.durianfarm.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "CAMERA"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-font",
+      "expo-localization",
+      "expo-secure-store",
+      "expo-splash-screen",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Ứng dụng cần dùng camera để chụp ảnh cây và nhận diện bệnh."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh cây trồng và hóa đơn."
+        }
+      ],
+      "expo-asset",
+      "expo-sqlite",
+      "onnxruntime-react-native"
+    ]
+  }
+}
