@@ -1,0 +1,4885 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "DurianOS API",
+    "version": "0.1.0-draft",
+    "summary": "Mobile + web admin API for DurianOS (brief v0.2, 2026-10-14).",
+    "description": "Contract for the backend that the Expo app (durianMobile) and the web admin call. Built from docs/durianos-architecture-overview.md, durianos-erd.md, durianos-scope.md, durianos-user-stories.md and brief v0.2, and checked against the client in durianMobile/src/api and src/types. Data shapes live in schema.json and are referenced as schema.json#/$defs/…. It is a design before implementation, not evidence that anything runs.\n\nx-status on an operation: `confirmed` = named by the docs / already used by the client; `assumed` = the client calls it but the docs do not fix it; `proposed` = needed by an AC or story but not specified, so this file proposes the shape.\n\nOffline rule of brief v0.2: only AI Scan is saved offline and synced (SQLite outbox -> POST /v1/sync). Every other write is online and is sent only when the user taps send; the app does not queue it. Content and the read cache are downloaded for offline reading, not synced."
+  },
+  "servers": [
+    {
+      "url": "{base}",
+      "variables": {
+        "base": {
+          "default": "https://api.example.com",
+          "description": "EXPO_PUBLIC_API_URL. The real host is not fixed yet."
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Identity"
+    },
+    {
+      "name": "Household data"
+    },
+    {
+      "name": "Media"
+    },
+    {
+      "name": "Content"
+    },
+    {
+      "name": "AI"
+    },
+    {
+      "name": "Admin"
+    }
+  ],
+  "x-conventions": {
+    "headers": {
+      "Authorization": "Bearer <session token> on every call except POST /v1/auth/session.",
+      "Accept-Language": "vi | en. Used for server-side error text only; the UI translates by `code`.",
+      "X-Request-Id": "uuid per HTTP attempt, echoed in the error body.",
+      "Idempotency-Key": "Only POST /v1/chat/reports. Household writes use mutation_id inside the body instead."
+    },
+    "status": {
+      "401": "No / expired / revoked session. The app signs out; unsynced Scan outbox rows are kept, never dropped.",
+      "403": "Not allowed (not admin, no AI consent).",
+      "404": "Unknown or someone else's row; indistinguishable on purpose.",
+      "409": "revision_conflict. On /v1/sync it is reported per mutation (status = conflict) inside an HTTP 200.",
+      "422": "Validation. On /v1/sync it is reported per mutation (status = rejected).",
+      "429": "Rate limit, retryable. Sends Retry-After.",
+      "503": "Temporary outage, retryable."
+    },
+    "money": "VND, VND/kg and kg are decimal strings; numeric(18,2) / numeric(12,3). No JSON numbers. Half-up to 0.01 VND on the phone and on the backend.",
+    "ownership": "RLS and the API check owner through the FK chain; owner_id never comes from the client. Admin routes never expose household finance or photos.",
+    "i18n": "Content is returned per locale with is_fallback and source_locale. Codes (stage, kind, category, disease_code…) are language independent.",
+    "errorShape": "ApiError: request_id, code, message, retryable, field?, details?. No stack, no secret."
+  },
+  "x-errorCodes": {
+    "unauthenticated": {
+      "http": 401,
+      "retryable": false,
+      "meaning": "Missing, invalid or expired session. The app signs out and shows sign-in."
+    },
+    "invalid_provider_token": {
+      "http": 401,
+      "retryable": false,
+      "meaning": "The Google / Apple id_token was rejected."
+    },
+    "forbidden": {
+      "http": 403,
+      "retryable": false,
+      "meaning": "Authenticated but not allowed."
+    },
+    "admin_required": {
+      "http": 403,
+      "retryable": false,
+      "meaning": "The caller is not in admin_member."
+    },
+    "ai_consent_required": {
+      "http": 403,
+      "retryable": false,
+      "meaning": "No valid AI consent on the backend. Nothing was sent to the LLM."
+    },
+    "not_found": {
+      "http": 404,
+      "retryable": false,
+      "meaning": "Unknown id, or a row owned by someone else. Both look identical so existence never leaks across households."
+    },
+    "revision_conflict": {
+      "http": 409,
+      "retryable": false,
+      "meaning": "expected_revision is stale. In /v1/sync this arrives as a per-mutation `conflict` result (HTTP 200) carrying the server rows."
+    },
+    "mutation_id_reused": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Same mutation_id with a different payload hash."
+    },
+    "validation_failed": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Generic body / field error. `field` is a dotted path."
+    },
+    "required": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A required field is missing."
+    },
+    "invalid_format": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Wrong type, pattern or enum value (money not a decimal string, bad date…)."
+    },
+    "out_of_range": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Number outside its range (score not in 0-1, negative area…)."
+    },
+    "must_be_positive": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Amount must be > 0."
+    },
+    "parent_not_found": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A referenced parent is missing, deleted or not yours."
+    },
+    "dependency_failed": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "An earlier mutation in the same request that this one depends on was not applied."
+    },
+    "duplicate_plot_name": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Plot name already used by a live plot of the farm."
+    },
+    "open_season_exists": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "The plot already has a season with closed_on = null."
+    },
+    "care_input_required": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "fertilizing / spraying needs at least one input with product_name."
+    },
+    "input_amount_unit_pair": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "amount and unit must be set together."
+    },
+    "season_mismatch": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "case_id / care_log_id belongs to another season."
+    },
+    "expense_link_taken": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "That care_log already has a live expense."
+    },
+    "expense_must_delete_with_care_log": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Deleting a care_log that has a live expense must tombstone both in one mutation."
+    },
+    "confirmed_requires_total": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A confirmed sale needs total_vnd >= 0."
+    },
+    "refund_exceeds_receipts": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Total refund would exceed deposit + receipt of the same sale."
+    },
+    "sale_has_payments": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A sale with payments is not deleted silently. Cancel it and record the real refund."
+    },
+    "has_live_children": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Deleting a parent that still has live children. Tombstone the children in the same mutation. (proposed)"
+    },
+    "scan_immutable": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A saved scan is a snapshot. Only case_id may change."
+    },
+    "unsupported_plant_part": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "plant_part is not in the app's model manifest. (The server cannot see the manifest; it checks the field is a non-empty code.)"
+    },
+    "unknown_disease_code": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "disease_code is not in disease."
+    },
+    "media_not_found": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "photo_id is not an asset of this user."
+    },
+    "item_not_in_version": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A self-check answer names an item outside the standard_version."
+    },
+    "hash_mismatch": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Uploaded bytes do not match the sha256 / size announced in media/prepare."
+    },
+    "upload_incomplete": {
+      "http": 422,
+      "retryable": true,
+      "meaning": "media/complete was called before the bytes arrived. Upload again with the same asset_id."
+    },
+    "translation_incomplete": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Standard translation does not cover every item of the version, so it cannot be published."
+    },
+    "source_missing": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A standard item without an official source link / check date, or an article without sources."
+    },
+    "not_approved": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "Only approved content can be published."
+    },
+    "invalid_transition": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "The workflow action is not allowed from the current status."
+    },
+    "published_immutable": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A published version cannot be edited. Create a new version or a new translation revision."
+    },
+    "contact_channel_required": {
+      "http": 422,
+      "retryable": false,
+      "meaning": "A contact needs at least one of phone, zalo, contact_url."
+    },
+    "rate_limited": {
+      "http": 429,
+      "retryable": true,
+      "meaning": "Too many requests (chat is limited server-side). Honour Retry-After. The app never retries automatically."
+    },
+    "llm_unavailable": {
+      "http": 503,
+      "retryable": true,
+      "meaning": "The external LLM / embedding service is unavailable. The user retries by hand."
+    },
+    "service_unavailable": {
+      "http": 503,
+      "retryable": true,
+      "meaning": "Temporary backend outage."
+    },
+    "index_failed": {
+      "http": 503,
+      "retryable": true,
+      "meaning": "RAG index build failed. The previous release stays live; admin retries. (admin only)"
+    }
+  },
+  "paths": {
+    "/v1/auth/session": {
+      "post": {
+        "operationId": "authExchange",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Exchange a Google / Apple id_token for a session",
+        "description": "ASSUMPTION. The architecture names Supabase Auth for Google/Apple but does not fix how the app hands the provider token over. The app calls only this one function (src/api/endpoints/auth.ts); swap it if the real flow differs.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "invalid_provider_token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "invalid_provider_token",
+          "validation_failed",
+          "service_unavailable"
+        ],
+        "x-rules": [
+          "Apple is available on iOS only. Apple and Google accounts are never merged by email: each provider subject is its own user.",
+          "The same Google account on a new phone returns the same user, so GET /v1/snapshot restores the synced data."
+        ],
+        "x-acceptance": [
+          "AC-17"
+        ],
+        "x-requirements": [
+          "FR-X01"
+        ],
+        "x-status": "assumed"
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Current user and preferences",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable"
+        ],
+        "x-requirements": [
+          "FR-X01"
+        ],
+        "x-status": "confirmed"
+      },
+      "delete": {
+        "operationId": "deleteAccount",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Delete the account, its data and photos, and revoke sessions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable"
+        ],
+        "x-rules": [
+          "Needs network. The app first shows how many scans are still unsynced and asks the farmer to confirm that data only on the phone is lost too.",
+          "Revokes every session, deletes household rows and private photos (storage cleanup may finish afterwards: media_pending > 0).",
+          "After this answer the app drops its outbox and cache and never retries with the old session.",
+          "A second, out-of-app deletion request path (public web URL) exists outside this API; its URL comes from the product owner / store service."
+        ],
+        "x-acceptance": [
+          "AC-18",
+          "AC-19"
+        ],
+        "x-requirements": [
+          "FR-X09"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/me/ai-consent": {
+      "put": {
+        "operationId": "setAiConsent",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Grant or withdraw consent for the external AI service",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/Preferences"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "version >= 1 grants (server stores ai_consent_version and ai_consented_at); null withdraws.",
+          "The backend re-checks consent on every POST /v1/chat. A withdrawn consent stops LLM calls at once."
+        ],
+        "x-acceptance": [
+          "AC-14"
+        ],
+        "x-requirements": [
+          "FR-X08"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/me/locale": {
+      "put": {
+        "operationId": "setLocale",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Save the preferred language",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocaleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/Preferences"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "Changing locale never changes ids, codes, scores, notes, money or ticks, and creates no business row."
+        ],
+        "x-acceptance": [
+          "AC-21",
+          "AC-22"
+        ],
+        "x-requirements": [
+          "FR-X02"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/snapshot": {
+      "get": {
+        "operationId": "getSnapshot",
+        "tags": [
+          "Household data"
+        ],
+        "summary": "Everything acknowledged for the caller, tombstones included",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/Snapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable"
+        ],
+        "x-rules": [
+          "Used on first sign-in, on a new phone and to refresh the read cache.",
+          "Rows with deleted_at != null are included so deletes sync and a stale phone never revives them.",
+          "Contains only data the server has acknowledged. Scans still in a phone's outbox are not here and cannot be restored if that phone is lost.",
+          "Scoped to the caller's own rows; no id from the client is trusted for ownership."
+        ],
+        "x-acceptance": [
+          "AC-08",
+          "AC-17"
+        ],
+        "x-requirements": [
+          "FR-X04"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/sync": {
+      "post": {
+        "operationId": "sync",
+        "tags": [
+          "Household data"
+        ],
+        "summary": "Apply mutations (offline Scan outbox and online writes)",
+        "description": "Single write endpoint for household data. Per brief v0.2 only Scan may be queued offline (SQLite outbox); every other write is sent online, one mutation per user action. HTTP status describes the request only (200 when it was processed). The outcome of each mutation is in results[].status: applied | conflict | rejected.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "schema.json#/$defs/SyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/SyncResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "validation_failed",
+          "rate_limited"
+        ],
+        "x-rules": [
+          "Mutations run in array order, each in ONE database transaction that also stores its mutation_receipt. Ops inside a mutation commit together or not at all.",
+          "Idempotency: same (user, mutation_id) + same payload hash returns the stored result unchanged (also after a lost response). Same id + different payload -> rejected mutation_id_reused. Never create a new uuid, expense or payment on retry.",
+          "Revision: upsert with expected_revision null creates (id must be new); otherwise it must equal the stored revision or the mutation is `conflict` with the server rows. Delete always needs the current revision.",
+          "Two phones editing one record from one revision: the later mutation is `conflict`; the app keeps local and server versions for the farmer to choose. Independent records are accepted; there is no device lock and no auto-merge.",
+          "Ordering: send parents before children (farm -> plot -> season -> case -> scan). A mutation whose parent was not applied is rejected with dependency_failed.",
+          "A scan upload sends ops [disease_case upsert?, scan upsert] in one mutation. The scan references a photo_id that was prepared via /v1/media/prepare; metadata may arrive before the photo, but the app shows `synced` only after /v1/media/complete as well.",
+          "Care log with cost: upsert care_log and upsert expense{care_log_id} in ONE mutation; editing the amount from the care log or from the expense book updates the same expense row. Deleting a care_log that has a live expense must delete both in one mutation.",
+          "Server owns id-independent fields: revision, created_at, updated_at, deleted_at, owner_id, season.forecast_updated_at. The client cannot set them.",
+          "Money and weights are decimal strings. The server recomputes nothing it stores, but validates sign, precision and the refund <= deposit+receipt rule and is canonical for derived totals.",
+          "delete = tombstone (deleted_at set, revision + 1). Deleting a farm / plot / season with live children is rejected (has_live_children) unless the same mutation tombstones them.",
+          "Closed seasons still accept corrections and sale_payments for old debts.",
+          "Limits (proposed): 20 mutations per request, 50 ops per mutation."
+        ],
+        "x-acceptance": [
+          "AC-03",
+          "AC-08",
+          "AC-09",
+          "AC-10",
+          "AC-12"
+        ],
+        "x-requirements": [
+          "FR-X06",
+          "FR-X07"
+        ],
+        "x-retry": {
+          "safe": true,
+          "how": "Resend the SAME Mutation objects. The server answers from mutation_receipt."
+        },
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/media/prepare": {
+      "post": {
+        "operationId": "prepareMedia",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Register a photo and get a one-time upload URL",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareMediaRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepareMediaResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "asset_id, size and sha256 are fixed by the phone before upload. Calling again with the same asset_id and hash returns the same asset (and a fresh upload_url while status is pending).",
+          "The same asset_id with a different sha256 -> 422 validation_failed.",
+          "The phone PUTs the bytes to upload_url (storage, not this API). The bucket is private per owner; signed URLs are never used as ids."
+        ],
+        "x-acceptance": [
+          "AC-10"
+        ],
+        "x-requirements": [
+          "FR-A09",
+          "FR-B10"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/media/complete": {
+      "post": {
+        "operationId": "completeMedia",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Confirm the uploaded bytes and mark the asset ready",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteMediaRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/entities/MediaAsset"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "hash_mismatch, upload_incomplete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "not_found",
+          "hash_mismatch",
+          "upload_incomplete"
+        ],
+        "x-rules": [
+          "The server checks the stored object against size_bytes and sha256, then sets status = ready.",
+          "Idempotent: completing a ready asset returns it again. An interrupted upload resumes by calling prepare + PUT + complete with the same asset_id; no second scan or expense is created."
+        ],
+        "x-acceptance": [
+          "AC-10"
+        ],
+        "x-requirements": [
+          "FR-A09",
+          "FR-B10"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/media/{id}/access": {
+      "get": {
+        "operationId": "getMediaAccess",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Short-lived signed URL to view a private photo",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaAccess"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "not_found"
+        ],
+        "x-rules": [
+          "Only the owner gets a URL; another household gets not_found. The URL expires and is never stored as an id."
+        ],
+        "x-acceptance": [
+          "AC-10"
+        ],
+        "x-requirements": [
+          "FR-A09",
+          "FR-B08"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/content/manifest": {
+      "get": {
+        "operationId": "getContentManifest",
+        "tags": [
+          "Content"
+        ],
+        "summary": "Current release descriptor",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/content/ContentManifest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable"
+        ],
+        "x-rules": [
+          "The app checks on launch, when the network returns, on foreground when the last check is older than 24 h, and on manual refresh. No background download while the app is closed."
+        ],
+        "x-acceptance": [
+          "AC-15",
+          "AC-25"
+        ],
+        "x-requirements": [
+          "FR-X11"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/content/releases/{release_no}": {
+      "get": {
+        "operationId": "getContentRelease",
+        "tags": [
+          "Content"
+        ],
+        "summary": "A whole approved release (vi + en text, versions, hashes, tombstones)",
+        "parameters": [
+          {
+            "name": "release_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/content/ContentRelease"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "not_found"
+        ],
+        "x-rules": [
+          "Contains only approved, published entries. A category with nothing approved returns an empty array, not sample data.",
+          "The app downloads into staging, verifies checksum, then swaps the whole pack atomically. A failed or partial download keeps the old pack.",
+          "Missing translation: the version's own source text with is_fallback = true. Never text from an older version."
+        ],
+        "x-acceptance": [
+          "AC-07",
+          "AC-15",
+          "AC-23",
+          "AC-25"
+        ],
+        "x-requirements": [
+          "FR-X11",
+          "FR-C02",
+          "FR-D01",
+          "FR-E01"
+        ],
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/content/article-versions/{version_id}": {
+      "get": {
+        "operationId": "getArticleVersionText",
+        "tags": [
+          "Content"
+        ],
+        "summary": "Open the exact text a citation points to",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Locale"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/content/Article"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "not_found"
+        ],
+        "x-rules": [
+          "Returns the translation revision named by the citation even if a newer revision or version is now published, so an old citation opens the old text.",
+          "Use the citation's source_locale as `locale`."
+        ],
+        "x-acceptance": [
+          "AC-13",
+          "AC-24",
+          "AC-25"
+        ],
+        "x-requirements": [
+          "FR-C05"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/chat": {
+      "post": {
+        "operationId": "chat",
+        "tags": [
+          "AI"
+        ],
+        "summary": "Ask the chatbot (online, consent required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ai_consent_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable, llm_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "ai_consent_required",
+          "validation_failed",
+          "not_found",
+          "rate_limited",
+          "llm_unavailable"
+        ],
+        "x-rules": [
+          "Backend checks consent first. Without a valid consent nothing leaves the system (ai_consent_required) and the app falls back to local article search.",
+          "Every optional id (season_id, case_id) is verified against the caller's ownership; other households' data is never retrieved.",
+          "Context = published article_translation chunks (pgvector) + the caller's synced season / case snapshot + deterministically computed finance totals. The LLM key stays on the server; no token, email or original photo is sent.",
+          "Question, article text and farm notes are data, not instructions; chat cannot write farm data, money or ticks.",
+          "context_as_of is computed by the server from the synced snapshot. Citations carry source id, version, translation revision and the source language.",
+          "Not enough grounds -> status = insufficient_sources with a suitable article cited.",
+          "No server-side chat history. Rate limited per user."
+        ],
+        "x-acceptance": [
+          "AC-13",
+          "AC-14",
+          "AC-24"
+        ],
+        "x-requirements": [
+          "FR-C04",
+          "FR-C05",
+          "FR-C06",
+          "FR-C07",
+          "FR-C08",
+          "FR-C10"
+        ],
+        "x-retry": {
+          "safe": false,
+          "how": "Never retried automatically: a retry costs another LLM call. The app keeps the question and the user retries by hand (429 / 503 carry retryable = true)."
+        },
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/chat/reports": {
+      "post": {
+        "operationId": "reportChatAnswer",
+        "tags": [
+          "AI"
+        ],
+        "summary": "Report one answer (only what the farmer confirmed)",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Optional uuid. A resend with the same key returns the same report instead of creating another.",
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "service_unavailable",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "One confirmed report = one chat_report row. No conversation history and no farm data are stored.",
+          "The app never retries this call by itself."
+        ],
+        "x-acceptance": [
+          "AC-20"
+        ],
+        "x-requirements": [
+          "FR-C09"
+        ],
+        "x-retry": {
+          "safe": false,
+          "how": "User-initiated only; send the same Idempotency-Key when resending."
+        },
+        "x-status": "confirmed"
+      }
+    },
+    "/v1/admin/me": {
+      "get": {
+        "operationId": "adminMe",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Check admin access",
+        "x-requires": "admin_member",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMe"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable"
+        ],
+        "x-rules": [
+          "Admin is a row in admin_member granted by the backend, never inferred from email. Sign-in is Google OAuth. A normal user gets 403 on every /v1/admin route."
+        ],
+        "x-acceptance": [
+          "AC-17"
+        ],
+        "x-requirements": [
+          "FR-F01"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/articles": {
+      "get": {
+        "operationId": "adminListArticles",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List articles",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "schema.json#/$defs/ContentStatus"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ArticleSummary"
+                      }
+                    },
+                    "next_cursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable"
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F02"
+        ],
+        "x-status": "proposed"
+      },
+      "post": {
+        "operationId": "adminCreateArticle",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create an article with its first draft version",
+        "x-requires": "admin_member",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArticleVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleVersion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed, source_missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "validation_failed",
+          "source_missing"
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F02"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/articles/{id}": {
+      "get": {
+        "operationId": "adminGetArticle",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "One article with all versions and translations",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "article": {
+                      "$ref": "schema.json#/$defs/tables/knowledge_article"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ArticleVersion"
+                      }
+                    }
+                  },
+                  "required": [
+                    "article",
+                    "versions"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found"
+        ],
+        "x-requirements": [
+          "FR-F02"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/articles/{id}/versions": {
+      "post": {
+        "operationId": "adminNewArticleVersion",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Start a new draft version (a change to the source text creates a version)",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArticleVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleVersion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "At most one working draft per article."
+        ],
+        "x-acceptance": [
+          "AC-25"
+        ],
+        "x-requirements": [
+          "FR-F02"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/article-versions/{id}": {
+      "patch": {
+        "operationId": "adminEditArticleVersion",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Edit a draft version",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArticleVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleVersion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "published_immutable, validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "published_immutable",
+          "validation_failed"
+        ],
+        "x-requirements": [
+          "FR-F02"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/article-versions/{id}/translations/{locale}": {
+      "put": {
+        "operationId": "adminPutArticleTranslation",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Write a translation (creates a new revision)",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Locale"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArticleTranslationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/article_translation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "Allowed on a published version too: it makes a new translation revision, keeps the article / checklist ids and every tick, and old citations keep opening the old revision."
+        ],
+        "x-acceptance": [
+          "AC-23",
+          "AC-25"
+        ],
+        "x-requirements": [
+          "FR-F02"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/article-versions/{id}/transition": {
+      "post": {
+        "operationId": "adminArticleTransition",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Review, approve, publish or unpublish",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleVersion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_transition, not_approved, source_missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable, index_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "invalid_transition",
+          "not_approved",
+          "source_missing",
+          "index_failed"
+        ],
+        "x-rules": [
+          "publish: build chunks + embeddings and the release pack first, then move the published pointer and content_release in one transaction. Index failure leaves the previous release current.",
+          "unpublish: removes the translation from RAG for new questions at once; phones that already downloaded it only update when they next connect.",
+          "A version that a citation or self-check references stays readable."
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F02",
+          "FR-F05"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/standards": {
+      "get": {
+        "operationId": "adminListStandards",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List market profiles (CN/fresh, EU/fresh)",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StandardProfileSummary"
+                      }
+                    },
+                    "next_cursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable"
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F03"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/standards/{id}": {
+      "get": {
+        "operationId": "adminGetStandard",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "One profile with versions, items and translations",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "profile": {
+                      "$ref": "schema.json#/$defs/tables/standard_profile"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "$ref": "schema.json#/$defs/tables/standard_version"
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "schema.json#/$defs/tables/standard_item"
+                            }
+                          },
+                          "translations": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "schema.json#/$defs/tables/standard_translation"
+                            }
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "items",
+                          "translations"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "versions"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found"
+        ],
+        "x-requirements": [
+          "FR-F03"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/standards/{id}/versions": {
+      "post": {
+        "operationId": "adminNewStandardVersion",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Start a new draft version of a profile",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/standard_version"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed, source_missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "validation_failed",
+          "source_missing"
+        ],
+        "x-rules": [
+          "Changing a requirement always makes a new version; ticks of the previous version stay with it and the new checklist starts unticked."
+        ],
+        "x-acceptance": [
+          "AC-16"
+        ],
+        "x-requirements": [
+          "FR-F03"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/standard-versions/{id}": {
+      "put": {
+        "operationId": "adminReplaceStandardDraft",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Replace a draft version's items and sources",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/standard_version"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "published_immutable, validation_failed, source_missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "published_immutable",
+          "validation_failed",
+          "source_missing"
+        ],
+        "x-requirements": [
+          "FR-F03"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/standard-versions/{id}/translations/{locale}": {
+      "put": {
+        "operationId": "adminPutStandardTranslation",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Write a checklist translation (new revision)",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Locale"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardTranslationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/standard_translation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "Item ids are kept, so a translation edit never resets ticks."
+        ],
+        "x-acceptance": [
+          "AC-23",
+          "AC-25"
+        ],
+        "x-requirements": [
+          "FR-F03"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/standard-versions/{id}/transition": {
+      "post": {
+        "operationId": "adminStandardTransition",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Review, approve, publish or unpublish a version",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/standard_version"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_transition, not_approved, translation_incomplete, source_missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable, index_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "invalid_transition",
+          "not_approved",
+          "translation_incomplete",
+          "source_missing",
+          "index_failed"
+        ],
+        "x-rules": [
+          "An empty profile (no approved version) is allowed; the app then shows the empty state."
+        ],
+        "x-acceptance": [
+          "AC-15",
+          "AC-23"
+        ],
+        "x-requirements": [
+          "FR-F03",
+          "FR-F05"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/contacts": {
+      "get": {
+        "operationId": "adminListContacts",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List directory contacts",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "schema.json#/$defs/ContentStatus"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "schema.json#/$defs/ContactKind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schema.json#/$defs/tables/directory_contact"
+                      }
+                    },
+                    "next_cursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable"
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F04"
+        ],
+        "x-status": "proposed"
+      },
+      "post": {
+        "operationId": "adminCreateContact",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create a contact (draft)",
+        "x-requires": "admin_member",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/directory_contact"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed, contact_channel_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "validation_failed",
+          "contact_channel_required"
+        ],
+        "x-requirements": [
+          "FR-F04"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/contacts/{id}": {
+      "patch": {
+        "operationId": "adminEditContact",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Edit a contact",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/directory_contact"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed, contact_channel_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "validation_failed",
+          "contact_channel_required"
+        ],
+        "x-requirements": [
+          "FR-F04"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/contacts/{id}/translations/{locale}": {
+      "put": {
+        "operationId": "adminPutContactTranslation",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Write the description / specialty text",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Locale"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactTranslationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/directory_contact_translation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "validation_failed"
+        ],
+        "x-rules": [
+          "Phone, zalo and link are never copied per translation."
+        ],
+        "x-requirements": [
+          "FR-F04"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/contacts/{id}/transition": {
+      "post": {
+        "operationId": "adminContactTransition",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Verify, publish or unpublish a contact",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "schema.json#/$defs/tables/directory_contact"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_transition, not_approved, contact_channel_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable, index_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "invalid_transition",
+          "not_approved",
+          "contact_channel_required",
+          "index_failed"
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F04",
+          "FR-F05"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/releases": {
+      "get": {
+        "operationId": "adminListReleases",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Release and index status",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReleaseStatus"
+                      }
+                    },
+                    "next_cursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable"
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F05"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/releases/retry": {
+      "post": {
+        "operationId": "adminRetryRelease",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Retry a failed index / release build",
+        "x-requires": "admin_member",
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable, index_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "index_failed"
+        ],
+        "x-rules": [
+          "Same work as the daily reconcile / retry job over already-approved content. It never crawls for new regulations."
+        ],
+        "x-acceptance": [
+          "AC-15"
+        ],
+        "x-requirements": [
+          "FR-F05",
+          "FR-F07"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/chat-reports": {
+      "get": {
+        "operationId": "adminListChatReports",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Reports the farmers confirmed",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "schema.json#/$defs/ChatReportStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ChatReportAdmin"
+                      }
+                    },
+                    "next_cursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable"
+        ],
+        "x-rules": [
+          "Admins see only the confirmed question / answer / citations. No conversation, no farm record, no photo."
+        ],
+        "x-acceptance": [
+          "AC-20"
+        ],
+        "x-requirements": [
+          "FR-F06"
+        ],
+        "x-status": "proposed"
+      }
+    },
+    "/v1/admin/chat-reports/{id}": {
+      "patch": {
+        "operationId": "adminUpdateChatReport",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Change a report's status",
+        "x-requires": "admin_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatReportPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatReportAdmin"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "validation_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "service_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "x-errorCodes": [
+          "unauthenticated",
+          "admin_required",
+          "service_unavailable",
+          "not_found",
+          "validation_failed"
+        ],
+        "x-acceptance": [
+          "AC-20"
+        ],
+        "x-requirements": [
+          "FR-F06"
+        ],
+        "x-status": "proposed"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "description": "Echo of X-Request-Id (or a server id). Quote it in a report."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable machine code from x-errorCodes. The UI translates by code; `message` is for logs."
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string",
+            "description": "Dotted path of the offending field (422)."
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "code"
+              ]
+            }
+          }
+        },
+        "required": [
+          "request_id",
+          "code",
+          "message",
+          "retryable"
+        ],
+        "description": "Body of every non-2xx response. Never contains a stack trace or a secret."
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Bearer token. The app keeps it in the OS secure store, never in SQLite or logs."
+          },
+          "user": {
+            "$ref": "schema.json#/$defs/User"
+          }
+        },
+        "required": [
+          "token",
+          "user"
+        ]
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "schema.json#/$defs/User"
+          },
+          "preferences": {
+            "$ref": "schema.json#/$defs/Preferences"
+          }
+        },
+        "required": [
+          "user",
+          "preferences"
+        ]
+      },
+      "AuthSessionRequest": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "schema.json#/$defs/AuthProvider"
+          },
+          "id_token": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "provider",
+          "id_token"
+        ]
+      },
+      "AiConsentRequest": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "description": "version = the consent text version accepted. null withdraws consent."
+      },
+      "LocaleRequest": {
+        "type": "object",
+        "properties": {
+          "locale": {
+            "$ref": "schema.json#/$defs/Locale"
+          }
+        },
+        "required": [
+          "locale"
+        ]
+      },
+      "DeletionStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "deleted",
+              "deleting"
+            ]
+          },
+          "session_revoked": {
+            "type": "boolean"
+          },
+          "media_pending": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Photos still being removed from storage."
+          }
+        },
+        "required": [
+          "status",
+          "session_revoked",
+          "media_pending"
+        ]
+      },
+      "PrepareMediaRequest": {
+        "type": "object",
+        "properties": {
+          "asset_id": {
+            "$ref": "schema.json#/$defs/Uuid",
+            "description": "Stable id chosen by the phone, so a retried upload is the same asset."
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "$ref": "schema.json#/$defs/Sha256"
+          }
+        },
+        "required": [
+          "asset_id",
+          "mime_type",
+          "size_bytes",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "PrepareMediaResponse": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "$ref": "schema.json#/$defs/entities/MediaAsset"
+          },
+          "upload_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Time-limited signed URL to PUT the bytes to. null when the asset is already ready. Never store it as an id."
+          }
+        },
+        "required": [
+          "asset",
+          "upload_url"
+        ]
+      },
+      "CompleteMediaRequest": {
+        "type": "object",
+        "properties": {
+          "asset_id": {
+            "$ref": "schema.json#/$defs/Uuid"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "additionalProperties": false
+      },
+      "MediaAccess": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expires_at": {
+            "$ref": "schema.json#/$defs/Timestamp"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at"
+        ]
+      },
+      "ChatRequest": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "locale": {
+            "$ref": "schema.json#/$defs/Locale"
+          },
+          "season_id": {
+            "$ref": "schema.json#/$defs/Uuid"
+          },
+          "case_id": {
+            "$ref": "schema.json#/$defs/Uuid"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role",
+                "text"
+              ]
+            },
+            "maxItems": 6
+          },
+          "client_last_synced_at": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lets the app warn about local data that is not on the server. The server computes context_as_of itself and never trusts this value for that."
+          }
+        },
+        "required": [
+          "question",
+          "locale",
+          "history",
+          "client_last_synced_at"
+        ],
+        "additionalProperties": false,
+        "description": "Optional ids are validated against the caller's ownership. Question text, article text and farm notes are data, never instructions."
+      },
+      "ChatResponse": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "answer_locale": {
+            "$ref": "schema.json#/$defs/Locale"
+          },
+          "status": {
+            "enum": [
+              "answered",
+              "insufficient_sources"
+            ],
+            "description": "insufficient_sources: say the information is missing and point to a suitable article."
+          },
+          "context_as_of": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Server-computed time of the synced snapshot used. null when no farm context was used."
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "schema.json#/$defs/Citation"
+            }
+          }
+        },
+        "required": [
+          "answer",
+          "answer_locale",
+          "status",
+          "context_as_of",
+          "citations"
+        ]
+      },
+      "ChatReportRequest": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "schema.json#/$defs/Citation"
+            }
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "question",
+          "answer",
+          "citations",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "description": "Only the parts the farmer previewed and confirmed. Not the whole conversation, not farm data."
+      },
+      "IdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "schema.json#/$defs/Uuid"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "AdminMe": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "schema.json#/$defs/User"
+          },
+          "is_admin": {
+            "const": true
+          }
+        },
+        "required": [
+          "user",
+          "is_admin"
+        ]
+      },
+      "TransitionRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "submit_review",
+              "approve",
+              "publish",
+              "unpublish",
+              "reject_to_draft"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "description": "publish builds the RAG index and the release first, then moves the pointer in one transaction. If indexing fails the previous release stays live (index_failed)."
+      },
+      "ReleaseStatus": {
+        "type": "object",
+        "properties": {
+          "release_no": {
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "building",
+              "ready",
+              "current",
+              "failed"
+            ]
+          },
+          "created_at": {
+            "$ref": "schema.json#/$defs/Timestamp"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/Sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "available_locales": {
+            "type": "array",
+            "items": {
+              "$ref": "schema.json#/$defs/Locale"
+            }
+          },
+          "index_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "release_no",
+          "state",
+          "created_at",
+          "checksum",
+          "available_locales",
+          "index_version",
+          "error"
+        ]
+      },
+      "ArticleSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "schema.json#/$defs/Uuid"
+          },
+          "published_version_id": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_version_id": {
+            "$ref": "schema.json#/$defs/Uuid"
+          },
+          "latest_version_no": {
+            "type": "integer"
+          },
+          "latest_status": {
+            "$ref": "schema.json#/$defs/ContentStatus"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "published_version_id",
+          "latest_version_id",
+          "latest_version_no",
+          "latest_status",
+          "title",
+          "disease_code"
+        ]
+      },
+      "ArticleVersionBody": {
+        "type": "object",
+        "properties": {
+          "source_locale": {
+            "$ref": "schema.json#/$defs/Locale"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "plant_parts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "source_locale",
+          "source_links"
+        ],
+        "additionalProperties": false
+      },
+      "ArticleVersion": {
+        "allOf": [
+          {
+            "$ref": "schema.json#/$defs/tables/article_version"
+          }
+        ],
+        "description": "Row of article_version with its translations.",
+        "properties": {
+          "translations": {
+            "type": "array",
+            "items": {
+              "$ref": "schema.json#/$defs/tables/article_translation"
+            }
+          }
+        }
+      },
+      "ArticleTranslationBody": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "search_keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "additionalProperties": false,
+        "description": "Creates a NEW translation revision for (version, locale). Editing a translation never creates a new article version and never touches ids or ticks."
+      },
+      "StandardProfileSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "schema.json#/$defs/Uuid"
+          },
+          "market_code": {
+            "type": "string"
+          },
+          "product_form_code": {
+            "type": "string"
+          },
+          "published_version_id": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_version_id": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_status": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/ContentStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "market_code",
+          "product_form_code",
+          "published_version_id",
+          "latest_version_id",
+          "latest_status"
+        ]
+      },
+      "StandardVersionBody": {
+        "type": "object",
+        "properties": {
+          "source_locale": {
+            "$ref": "schema.json#/$defs/Locale"
+          },
+          "source_links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effective_on": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/DateString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "schema.json#/$defs/Uuid",
+                  "description": "Omit for a new item; keep it when carrying an item into a new draft."
+                },
+                "item_key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "source_link": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "source_checked_at": {
+                  "$ref": "schema.json#/$defs/Timestamp"
+                },
+                "sort_order": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "item_key",
+                "source_link",
+                "source_checked_at",
+                "sort_order"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "source_locale",
+          "source_links",
+          "items"
+        ],
+        "additionalProperties": false,
+        "description": "Draft only. Replaces the draft's item list. Each item needs an official source that applies to FRESH durian for the right market and a source check date. Do not reuse frozen-goods protocols; do not list the EU phytosanitary certificate as a general condition."
+      },
+      "StandardTranslationBody": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "standard_item_id": {
+                  "$ref": "schema.json#/$defs/Uuid"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "body": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "standard_item_id",
+                "title"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "title",
+          "items"
+        ],
+        "additionalProperties": false,
+        "description": "New translation revision. It can be published only when it covers EVERY item of the version (translation_incomplete otherwise)."
+      },
+      "ContactBody": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "schema.json#/$defs/ContactKind"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "province": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "zalo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "$ref": "schema.json#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_locale": {
+            "$ref": "schema.json#/$defs/Locale"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "source_locale"
+        ],
+        "additionalProperties": false,
+        "description": "At least one of phone, zalo, contact_url (contact_channel_required)."
+      },
+      "ContactTranslationBody": {
+        "type": "object",
+        "properties": {
+          "specialty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatReportAdmin": {
+        "$ref": "schema.json#/$defs/tables/chat_report"
+      },
+      "ChatReportPatch": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "schema.json#/$defs/ChatReportStatus"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "x-openQuestions": [
+    "POST /v1/auth/session is assumed; confirm the Supabase Auth hand-off (exchange endpoint or SDK on the phone with the Supabase JWT used directly).",
+    "Delete-account may need an async storage cleanup; confirm 200 + media_pending versus a job id.",
+    "Out-of-app deletion request path (public URL, no session) is outside this API; its URL and verification method come from the product owner / store service.",
+    "Limits (20 mutations / 50 ops per request, chat question 2000 chars, 6 history turns) are proposals.",
+    "Restoring a scan whose photo upload never completed: the scan row exists on the server but the photo is `pending`; decide how the UI marks it.",
+    "Whether tick / self_check writes may be queued offline: brief v0.2 says no (online only). The docs/ AC-08 allowed it.",
+    "Admin API shapes are proposals; the docs only name /v1/admin/... and the stories."
+  ]
+}

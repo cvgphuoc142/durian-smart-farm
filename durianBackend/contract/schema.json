@@ -1,0 +1,7583 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DurianOS data schema",
+  "description": "Data contract for DurianOS (brief v0.2, 2026-10-14). Built from docs/durianos-erd.md and the brief. `$defs.tables` is the database design (32 tables, a design before migration, not a schema that has run). `$defs.entities` / `EntityCreate` / `EntityPatch` / `Mutation*` / `Snapshot` / `content` are the JSON the API and the app exchange. `x-` keys carry what JSON Schema cannot express (keys, unique indexes with their live-row filter, cross-row checks).",
+  "x-version": "0.1.0-draft",
+  "x-conventions": {
+    "ids": "Household rows have a client-generated uuid. Content rows have a server uuid (disease.code is a stable text key). Never use email as a key; AUTH_USER is the Auth subject.",
+    "bookkeeping": "id, created_at, updated_at, revision, deleted_at on every household row; the server owns all but id.",
+    "ownership": "Every child checks ownership through its FK chain to farm.owner_id (or media_asset.owner_id). RLS and the API enforce the same rule. owner_id is never read from the client.",
+    "softDelete": "Household rows are tombstoned, not removed. Unique rules apply to live rows only (deleted_at IS NULL).",
+    "money": "VND and VND/kg are numeric(18,2); kg is numeric(12,3). JSON uses decimal strings. null = unknown.",
+    "dates": "`date` = farming day the farmer typed; timestamptz = UTC.",
+    "stableCodes": "stage, kind, category, status, plant_part, outcome, contact kind are stable codes. Vietnamese / English labels live in the translation catalogs, not in rows.",
+    "versioning": "Published content and any revision once referenced by a citation or self-check stay immutable.",
+    "revision": "expected_revision is checked per record. Two phones editing the same record from one revision: the later mutation gets conflict. Independent records are accepted. There is no device lock.",
+    "localOnly": "The phone's SQLite (outbox, local scan photos, read cache of farm/plot/season/open cases, content pack + FTS) is not a backend table and is not described here. Per brief v0.2 the outbox serves only Scan."
+  },
+  "x-derivedMetrics": {
+    "description": "Computed, never stored. The phone and the backend use the same decimal rules; the backend result is canonical after sync.",
+    "arithmetic": {
+      "decimal": "No floats. Money rounds half-up to 0.01 VND after each multiplication; kg keep 3 decimals.",
+      "unknown": "A missing input gives an unknown result (null), never 0."
+    },
+    "metrics": {
+      "recorded_cost": "sum(expense.amount_vnd) over live expenses of the selected seasons",
+      "sales_value": "sum(sale.total_vnd) over live CONFIRMED sales. Deposits and receipts do not raise it.",
+      "net_receipts": "per sale: sum(deposit) + sum(receipt) - sum(refund) over live payments",
+      "profit_on_recorded": "sales_value - recorded_cost",
+      "receivable_confirmed": "per sale: max(total_vnd - net_receipts, 0)",
+      "refund_due_confirmed": "per sale: max(net_receipts - total_vnd, 0)",
+      "refund_due_cancelled": "per sale: max(net_receipts, 0)",
+      "provisional": "Shown as 'not confirmed'. Excluded from sales_value and receivable.",
+      "no_netting": "Receivable and refund due are shown per sale. Never offset across buyers.",
+      "forecast_profit": "round_half_up(forecast_yield_kg * forecast_price_vnd_kg, 2) - forecast_total_cost_vnd; unknown if any input is null",
+      "closed_season": "Still accepts payments for old debts. A new season inherits no debt."
+    },
+    "testVectors": [
+      {
+        "ac": "AC-03",
+        "given": "confirmed sale 100.00; deposit 20.00",
+        "then": {
+          "sales_value": "100.00",
+          "net_receipts": "20.00",
+          "receivable": "80.00"
+        }
+      },
+      {
+        "ac": "AC-03",
+        "given": "…then receipt 30.00",
+        "then": {
+          "sales_value": "100.00",
+          "net_receipts": "50.00",
+          "receivable": "50.00"
+        }
+      },
+      {
+        "ac": "AC-03",
+        "given": "…then receipt 50.00",
+        "then": {
+          "sales_value": "100.00",
+          "net_receipts": "100.00",
+          "receivable": "0.00"
+        }
+      },
+      {
+        "ac": "AC-04",
+        "given": "confirmed total 40.00, net receipts 50.00",
+        "then": {
+          "receivable": "0.00",
+          "refund_due": "10.00"
+        }
+      },
+      {
+        "ac": "AC-04",
+        "given": "cancelled sale, net receipts 30.00",
+        "then": {
+          "sales_value": "0.00 (excluded)",
+          "refund_due": "30.00"
+        }
+      },
+      {
+        "ac": "AC-05",
+        "given": "1.005 kg x 1.00 VND/kg",
+        "then": {
+          "amount": "1.01"
+        }
+      }
+    ]
+  },
+  "x-externalTables": {
+    "auth_user": "Supabase Auth subject (uuid). Referenced by owner_id / user_id / reviewed_by."
+  },
+  "x-tableCount": {
+    "household": 13,
+    "content": 14,
+    "ops": 5
+  },
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Household ids are created on the phone (UUID v4/v7)."
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC instant. The UI shows Asia/Ho_Chi_Minh."
+    },
+    "DateString": {
+      "type": "string",
+      "format": "date",
+      "description": "Calendar day chosen by the farmer, YYYY-MM-DD (Asia/Ho_Chi_Minh)."
+    },
+    "Revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "Locale": {
+      "type": "string",
+      "enum": [
+        "vi",
+        "en"
+      ],
+      "description": "Default vi. More languages must not change the business schema."
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "Score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Normalised 0-1. The UI may show a percentage; thresholds come from the model manifest."
+    },
+    "Vnd": {
+      "type": "string",
+      "pattern": "^\\d{1,16}(\\.\\d{1,2})?$",
+      "description": "VND, numeric(18,2), as a decimal STRING. Never a JSON number. Computed money rounds half-up to 0.01. null means unknown, which is not 0.",
+      "examples": [
+        "100.00",
+        "1.01"
+      ]
+    },
+    "VndPositive": {
+      "type": "string",
+      "pattern": "^(?!0+(\\.0+)?$)\\d{1,16}(\\.\\d{1,2})?$",
+      "description": "Vnd that must be > 0.",
+      "examples": [
+        "100.00",
+        "1.01"
+      ]
+    },
+    "Kg": {
+      "type": "string",
+      "pattern": "^\\d{1,9}(\\.\\d{1,3})?$",
+      "description": "Kilograms, numeric(12,3), decimal string.",
+      "examples": [
+        "1.005"
+      ]
+    },
+    "KgPositive": {
+      "type": "string",
+      "pattern": "^(?!0+(\\.0+)?$)\\d{1,9}(\\.\\d{1,3})?$",
+      "description": "Kg that must be > 0.",
+      "examples": [
+        "1.005"
+      ]
+    },
+    "Decimal": {
+      "type": "string",
+      "pattern": "^\\d{1,8}(\\.\\d{1,4})?$",
+      "description": "Non-negative decimal string (hectares). Precision is a proposal; the ERD fixes only 'not negative'."
+    },
+    "QuantityPositive": {
+      "type": "string",
+      "pattern": "^(?!0+(\\.0+)?$)\\d{1,9}(\\.\\d{1,3})?$",
+      "description": "Input amount > 0, decimal string."
+    },
+    "SeasonStage": {
+      "type": "string",
+      "enum": [
+        "recovery",
+        "flower_induction",
+        "flowering_fruit_set",
+        "fruit_growth",
+        "harvest"
+      ],
+      "x-labels": {
+        "recovery": "phục hồi / chăm sóc",
+        "flower_induction": "xử lý ra hoa",
+        "flowering_fruit_set": "ra hoa / đậu quả",
+        "fruit_growth": "nuôi quả",
+        "harvest": "thu hoạch"
+      }
+    },
+    "CareKind": {
+      "type": "string",
+      "enum": [
+        "watering",
+        "fertilizing",
+        "spraying",
+        "pruning",
+        "inspection",
+        "treatment",
+        "other"
+      ],
+      "x-labels": {
+        "watering": "tưới",
+        "fertilizing": "bón",
+        "spraying": "phun",
+        "pruning": "tỉa",
+        "inspection": "thăm vườn",
+        "treatment": "xử lý",
+        "other": "khác"
+      }
+    },
+    "ExpenseCategory": {
+      "type": "string",
+      "enum": [
+        "fertilizer",
+        "plant_protection",
+        "labor",
+        "utilities_irrigation",
+        "harvest_transport",
+        "other"
+      ],
+      "x-labels": {
+        "fertilizer": "phân bón",
+        "plant_protection": "thuốc BVTV",
+        "labor": "nhân công",
+        "utilities_irrigation": "điện / nước tưới",
+        "harvest_transport": "thu hoạch / vận chuyển",
+        "other": "khác"
+      }
+    },
+    "SaleStatus": {
+      "type": "string",
+      "enum": [
+        "provisional",
+        "confirmed",
+        "cancelled"
+      ]
+    },
+    "PaymentKind": {
+      "type": "string",
+      "enum": [
+        "deposit",
+        "receipt",
+        "refund"
+      ]
+    },
+    "ScanOutcome": {
+      "type": "string",
+      "enum": [
+        "suspected",
+        "healthy",
+        "inconclusive"
+      ],
+      "description": "Saved outcomes. The UI also has a fourth state, `error`, which is never saved or synced."
+    },
+    "PlantPart": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A body part that the bundled model manifest has a complete pipeline for (e.g. leaf). The set comes from the manifest, not from this schema."
+    },
+    "MediaStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "ready"
+      ]
+    },
+    "ContactKind": {
+      "type": "string",
+      "enum": [
+        "store",
+        "expert"
+      ]
+    },
+    "ContentStatus": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "in_review",
+        "approved",
+        "published",
+        "unpublished"
+      ],
+      "description": "Proposed workflow. Only approved content can be published."
+    },
+    "ChatReportStatus": {
+      "type": "string",
+      "enum": [
+        "open",
+        "in_progress",
+        "resolved",
+        "dismissed"
+      ],
+      "description": "Proposed values; the ERD only says `status`."
+    },
+    "AuthProvider": {
+      "type": "string",
+      "enum": [
+        "google",
+        "apple"
+      ]
+    },
+    "Prediction": {
+      "type": "object",
+      "properties": {
+        "disease_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "score": {
+          "$ref": "#/$defs/Score"
+        }
+      },
+      "required": [
+        "disease_code",
+        "score"
+      ]
+    },
+    "InferenceMetadata": {
+      "type": "object",
+      "properties": {
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pipeline_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "threshold_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inference_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "model_id",
+        "model_version",
+        "pipeline_version",
+        "threshold_version",
+        "inference_ms"
+      ],
+      "description": "Entries of the bundled manifest that produced the result. Additional keys are allowed."
+    },
+    "Citation": {
+      "type": "object",
+      "properties": {
+        "article_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "version_no": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "translation_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source_locale": {
+          "$ref": "#/$defs/Locale",
+          "description": "Language of the cited text, which can differ from the question language."
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "article_id",
+        "version_id",
+        "version_no",
+        "translation_revision",
+        "source_locale",
+        "title"
+      ],
+      "description": "Points to the exact translation revision that was used. Never to a newer one."
+    },
+    "CareInput": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "product_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuantityPositive"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_ingredient": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "product_name",
+        "amount",
+        "unit",
+        "active_ingredient"
+      ],
+      "additionalProperties": false,
+      "description": "Table care_input. Amount and unit travel together when known.",
+      "x-table": "care_input"
+    },
+    "CareInputWrite": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "product_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuantityPositive"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_ingredient": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "product_name"
+      ],
+      "additionalProperties": false,
+      "description": "Table care_input. Amount and unit travel together when known.",
+      "x-table": "care_input"
+    },
+    "SelfCheckAnswer": {
+      "type": "object",
+      "properties": {
+        "standard_item_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "checked_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "standard_item_id",
+        "checked"
+      ],
+      "additionalProperties": false,
+      "x-table": "self_check_answer"
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Auth subject. Never the email."
+        },
+        "provider": {
+          "$ref": "#/$defs/AuthProvider"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "provider",
+        "display_name"
+      ]
+    },
+    "Preferences": {
+      "type": "object",
+      "properties": {
+        "locale": {
+          "$ref": "#/$defs/Locale"
+        },
+        "ai_consent_version": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ai_consented_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "locale",
+        "ai_consent_version",
+        "ai_consented_at"
+      ]
+    },
+    "tables": {
+      "farm": {
+        "type": "object",
+        "x-table": "farm",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owner_id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Server-derived from the session. Never trusted from the client."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "province": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locality_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "owner_id",
+          "name",
+          "province",
+          "locality_text"
+        ],
+        "description": "A farmer's garden. Owner is the Auth subject, never an email.",
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "owner_id"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-indexes": [
+          [
+            "owner_id"
+          ]
+        ]
+      },
+      "plot": {
+        "type": "object",
+        "x-table": "plot",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "farm_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "variety": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "area_ha": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Decimal"
+                  }
+                ],
+                "description": "Hectares. Not negative."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tree_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planted_year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1900,
+                "maximum": 2100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "farm_id",
+          "name",
+          "variety",
+          "area_ha",
+          "tree_count",
+          "planted_year"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "farm_id"
+            ],
+            "references": {
+              "table": "farm",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "farm_id",
+              "name"
+            ],
+            "where": "deleted_at IS NULL"
+          }
+        ],
+        "x-checks": [
+          "area_ha >= 0",
+          "tree_count >= 0"
+        ],
+        "x-indexes": [
+          [
+            "farm_id"
+          ]
+        ]
+      },
+      "season": {
+        "type": "object",
+        "x-table": "season",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plot_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "started_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "stage": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/SeasonStage"
+              }
+            ],
+            "description": "Set by hand. No computed growth percentage."
+          },
+          "expected_harvest_on": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DateString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_on": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/DateString"
+                  }
+                ],
+                "description": "Set when the farmer closes the season."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_yield_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Kg"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_price_vnd_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_total_cost_vnd": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_updated_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Server sets it when any forecast_* value changes."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "plot_id",
+          "name",
+          "started_on",
+          "stage",
+          "expected_harvest_on",
+          "closed_on",
+          "forecast_yield_kg",
+          "forecast_price_vnd_kg",
+          "forecast_total_cost_vnd",
+          "forecast_updated_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "plot_id"
+            ],
+            "references": {
+              "table": "plot",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "plot_id"
+            ],
+            "where": "closed_on IS NULL AND deleted_at IS NULL",
+            "name": "one_open_season_per_plot"
+          }
+        ],
+        "x-checks": [
+          "forecast_yield_kg >= 0",
+          "forecast_price_vnd_kg >= 0",
+          "forecast_total_cost_vnd >= 0"
+        ],
+        "x-indexes": [
+          [
+            "plot_id"
+          ]
+        ]
+      },
+      "care_log": {
+        "type": "object",
+        "x-table": "care_log",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/CareKind"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "case_id",
+          "photo_id",
+          "occurred_on",
+          "kind",
+          "note"
+        ],
+        "description": "Wire shape embeds its care_input rows as `inputs` (replace-all on write).",
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "season_id"
+            ],
+            "references": {
+              "table": "season",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "case_id"
+            ],
+            "references": {
+              "table": "disease_case",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "photo_id"
+            ],
+            "references": {
+              "table": "media_asset",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-checks": [
+          "case_id, when set, belongs to the same season (composite FK or locked transaction check)",
+          "kind IN (fertilizing, spraying) requires at least one care_input with product_name"
+        ],
+        "x-indexes": [
+          [
+            "season_id",
+            "occurred_on"
+          ],
+          [
+            "case_id"
+          ],
+          [
+            "photo_id"
+          ]
+        ]
+      },
+      "care_input": {
+        "type": "object",
+        "x-table": "care_input",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "care_log_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "product_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/QuantityPositive"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active_ingredient": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "care_log_id",
+          "product_name",
+          "amount",
+          "unit",
+          "active_ingredient"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "care_log_id"
+            ],
+            "references": {
+              "table": "care_log",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          }
+        ],
+        "x-checks": [
+          "amount > 0 when set",
+          "amount and unit are both set or both null"
+        ],
+        "x-indexes": [
+          [
+            "care_log_id"
+          ]
+        ]
+      },
+      "expense": {
+        "type": "object",
+        "x-table": "expense",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "care_log_id": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Uuid"
+                  }
+                ],
+                "description": "Set when the cost was entered from a care log."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "category": {
+            "$ref": "#/$defs/ExpenseCategory"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "care_log_id",
+          "occurred_on",
+          "category",
+          "amount_vnd",
+          "note"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "season_id"
+            ],
+            "references": {
+              "table": "season",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "care_log_id"
+            ],
+            "references": {
+              "table": "care_log",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "care_log_id"
+            ],
+            "where": "care_log_id IS NOT NULL AND deleted_at IS NULL"
+          }
+        ],
+        "x-checks": [
+          "amount_vnd > 0",
+          "if care_log_id is set the care_log is in the same season"
+        ],
+        "x-indexes": [
+          [
+            "season_id",
+            "occurred_on"
+          ]
+        ]
+      },
+      "sale": {
+        "type": "object",
+        "x-table": "sale",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "buyer_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agreed_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "status": {
+            "$ref": "#/$defs/SaleStatus"
+          },
+          "total_vnd": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Vnd"
+                  }
+                ],
+                "description": "null while provisional and not agreed. Required once confirmed."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/KgPositive"
+                  }
+                ],
+                "description": "Optional; whole-lot sales need no weight."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "buyer_name",
+          "agreed_on",
+          "status",
+          "total_vnd",
+          "weight_kg",
+          "note"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "season_id"
+            ],
+            "references": {
+              "table": "season",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-checks": [
+          "status = 'confirmed' => total_vnd IS NOT NULL AND total_vnd >= 0",
+          "weight_kg > 0 when set"
+        ],
+        "x-indexes": [
+          [
+            "season_id",
+            "status"
+          ]
+        ]
+      },
+      "sale_payment": {
+        "type": "object",
+        "x-table": "sale_payment",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/PaymentKind"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "sale_id",
+          "occurred_on",
+          "kind",
+          "amount_vnd",
+          "note"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "sale_id"
+            ],
+            "references": {
+              "table": "sale",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-checks": [
+          "amount_vnd > 0",
+          "sum(refund) <= sum(deposit) + sum(receipt) over the live payments of the same sale (checked in the mutation transaction)"
+        ],
+        "x-indexes": [
+          [
+            "sale_id",
+            "occurred_on"
+          ]
+        ]
+      },
+      "disease_case": {
+        "type": "object",
+        "x-table": "disease_case",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "opened_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Set only by the farmer. Inference never closes a case."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "opened_at",
+          "closed_at",
+          "location_note",
+          "note"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "season_id"
+            ],
+            "references": {
+              "table": "season",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-indexes": [
+          [
+            "season_id"
+          ],
+          [
+            "season_id",
+            "closed_at"
+          ]
+        ]
+      },
+      "media_asset": {
+        "type": "object",
+        "x-table": "media_asset",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owner_id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Server-derived from the session. Never trusted from the client."
+          },
+          "object_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable storage key. Not a signed URL."
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "$ref": "#/$defs/Sha256"
+          },
+          "status": {
+            "$ref": "#/$defs/MediaStatus"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "owner_id",
+          "object_key",
+          "mime_type",
+          "size_bytes",
+          "sha256",
+          "status"
+        ],
+        "description": "Private photo. Created through /v1/media/prepare, not through /v1/sync.",
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "owner_id"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "object_key"
+            ]
+          },
+          {
+            "columns": [
+              "owner_id",
+              "sha256"
+            ],
+            "where": "deleted_at IS NULL",
+            "name": "same_photo_same_asset"
+          }
+        ],
+        "x-indexes": [
+          [
+            "owner_id"
+          ]
+        ]
+      },
+      "scan": {
+        "type": "object",
+        "x-table": "scan",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "captured_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "plant_part": {
+            "$ref": "#/$defs/PlantPart"
+          },
+          "outcome": {
+            "$ref": "#/$defs/ScanOutcome"
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Only when the class maps to a known disease. Never invented."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Score"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "predictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Prediction"
+            }
+          },
+          "inference_metadata": {
+            "$ref": "#/$defs/InferenceMetadata"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "case_id",
+          "photo_id",
+          "captured_at",
+          "plant_part",
+          "outcome",
+          "disease_code",
+          "score",
+          "label_snapshot",
+          "label_locale",
+          "predictions",
+          "inference_metadata"
+        ],
+        "description": "Immutable snapshot of one inference. Later model changes never re-run history.",
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "season_id"
+            ],
+            "references": {
+              "table": "season",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "case_id"
+            ],
+            "references": {
+              "table": "disease_case",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "photo_id"
+            ],
+            "references": {
+              "table": "media_asset",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "disease_code"
+            ],
+            "references": {
+              "table": "disease",
+              "columns": [
+                "code"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-checks": [
+          "score BETWEEN 0 AND 1",
+          "case_id, when set, belongs to the same season",
+          "outcome is never 'error': a runtime failure is UI state and is never saved or synced"
+        ],
+        "x-indexes": [
+          [
+            "season_id",
+            "captured_at"
+          ],
+          [
+            "case_id"
+          ],
+          [
+            "photo_id"
+          ]
+        ]
+      },
+      "self_check": {
+        "type": "object",
+        "x-table": "self_check",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_version_id": {
+            "$ref": "#/$defs/Uuid"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "standard_version_id"
+        ],
+        "description": "One checklist per season and standard version. Locale is not part of the key. Wire shape embeds `answers`.",
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "season_id"
+            ],
+            "references": {
+              "table": "season",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "standard_version_id"
+            ],
+            "references": {
+              "table": "standard_version",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "season_id",
+              "standard_version_id"
+            ],
+            "where": "deleted_at IS NULL"
+          }
+        ]
+      },
+      "self_check_answer": {
+        "type": "object",
+        "x-table": "self_check_answer",
+        "x-group": "household",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "self_check_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_item_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "checked": {
+            "type": "boolean"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "self_check_id",
+          "standard_item_id",
+          "checked",
+          "checked_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "self_check_id"
+            ],
+            "references": {
+              "table": "self_check",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          },
+          {
+            "columns": [
+              "standard_item_id"
+            ],
+            "references": {
+              "table": "standard_item",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "self_check_id",
+              "standard_item_id"
+            ],
+            "where": "deleted_at IS NULL"
+          }
+        ],
+        "x-checks": [
+          "standard_item belongs to self_check.standard_version_id"
+        ]
+      },
+      "disease": {
+        "type": "object",
+        "x-table": "disease",
+        "x-group": "content",
+        "x-primaryKey": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable. Does not change with language."
+          },
+          "source_locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "source_locale",
+          "active"
+        ],
+        "x-checks": [
+          "a code referenced by a scan is never deleted"
+        ]
+      },
+      "disease_translation": {
+        "type": "object",
+        "x-table": "disease_translation",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "disease_code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          }
+        },
+        "required": [
+          "id",
+          "disease_code",
+          "locale",
+          "display_name",
+          "aliases",
+          "revision",
+          "status"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "disease_code"
+            ],
+            "references": {
+              "table": "disease",
+              "columns": [
+                "code"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "disease_code",
+              "locale"
+            ]
+          }
+        ]
+      },
+      "knowledge_article": {
+        "type": "object",
+        "x-table": "knowledge_article",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "published_version_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "published_version_id"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "published_version_id"
+            ],
+            "references": {
+              "table": "article_version",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ]
+      },
+      "article_version": {
+        "type": "object",
+        "x-table": "article_version",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "article_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "version_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          },
+          "source_locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plant_parts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "article_id",
+          "version_no",
+          "status",
+          "source_locale",
+          "category",
+          "source_links",
+          "disease_code",
+          "plant_parts",
+          "stages",
+          "reviewed_by",
+          "published_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "article_id"
+            ],
+            "references": {
+              "table": "knowledge_article",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "disease_code"
+            ],
+            "references": {
+              "table": "disease",
+              "columns": [
+                "code"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "reviewed_by"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "article_id",
+              "version_no"
+            ]
+          },
+          {
+            "columns": [
+              "article_id"
+            ],
+            "where": "status IN ('draft','in_review','approved')",
+            "name": "one_working_draft"
+          }
+        ],
+        "x-checks": [
+          "a published version is immutable"
+        ]
+      },
+      "article_translation": {
+        "type": "object",
+        "x-table": "article_translation",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "article_version_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "search_keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "article_version_id",
+          "locale",
+          "revision_no",
+          "status",
+          "title",
+          "body",
+          "search_keywords",
+          "reviewed_by",
+          "published_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "article_version_id"
+            ],
+            "references": {
+              "table": "article_version",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "reviewed_by"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "article_version_id",
+              "locale",
+              "revision_no"
+            ]
+          }
+        ]
+      },
+      "knowledge_chunk": {
+        "type": "object",
+        "x-table": "knowledge_chunk",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "article_translation_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "chunk_no": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "embedding": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "x-pgType": "vector"
+          },
+          "embedding_model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "index_version": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "article_translation_id",
+          "chunk_no",
+          "text",
+          "embedding",
+          "embedding_model",
+          "index_version"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "article_translation_id"
+            ],
+            "references": {
+              "table": "article_translation",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "article_translation_id",
+              "chunk_no"
+            ]
+          }
+        ],
+        "x-checks": [
+          "one index never mixes embedding_model / dimension / index_version",
+          "only chunks of an approved and published article_translation are visible to RAG"
+        ]
+      },
+      "standard_profile": {
+        "type": "object",
+        "x-table": "standard_profile",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "market_code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "CN or EU in the first build."
+          },
+          "product_form_code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "fresh in the first build."
+          },
+          "source_locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "published_version_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "market_code",
+          "product_form_code",
+          "source_locale",
+          "published_version_id"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "published_version_id"
+            ],
+            "references": {
+              "table": "standard_version",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "market_code",
+              "product_form_code"
+            ]
+          }
+        ]
+      },
+      "standard_profile_translation": {
+        "type": "object",
+        "x-table": "standard_profile_translation",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_profile_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "market_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "product_form_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          }
+        },
+        "required": [
+          "id",
+          "standard_profile_id",
+          "locale",
+          "market_name",
+          "product_form_name",
+          "revision",
+          "status"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "standard_profile_id"
+            ],
+            "references": {
+              "table": "standard_profile",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "standard_profile_id",
+              "locale"
+            ]
+          }
+        ]
+      },
+      "standard_version": {
+        "type": "object",
+        "x-table": "standard_version",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_profile_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "version_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          },
+          "source_locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "source_links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effective_on": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DateString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "standard_profile_id",
+          "version_no",
+          "status",
+          "source_locale",
+          "source_links",
+          "effective_on",
+          "reviewed_by",
+          "published_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "standard_profile_id"
+            ],
+            "references": {
+              "table": "standard_profile",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          },
+          {
+            "columns": [
+              "reviewed_by"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "standard_profile_id",
+              "version_no"
+            ]
+          }
+        ],
+        "x-checks": [
+          "a published version and its items are immutable; changing a requirement creates a new version"
+        ]
+      },
+      "standard_item": {
+        "type": "object",
+        "x-table": "standard_item",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_version_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "item_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_link": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Official source that applies to fresh durian for this market."
+          },
+          "source_checked_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "sort_order": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "standard_version_id",
+          "item_key",
+          "source_link",
+          "source_checked_at",
+          "sort_order"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "standard_version_id"
+            ],
+            "references": {
+              "table": "standard_version",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "standard_version_id",
+              "item_key"
+            ]
+          }
+        ]
+      },
+      "standard_translation": {
+        "type": "object",
+        "x-table": "standard_translation",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_version_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "standard_version_id",
+          "locale",
+          "revision_no",
+          "status",
+          "title",
+          "description"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "standard_version_id"
+            ],
+            "references": {
+              "table": "standard_version",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "standard_version_id",
+              "locale",
+              "revision_no"
+            ]
+          },
+          {
+            "columns": [
+              "standard_version_id",
+              "locale"
+            ],
+            "where": "status = 'published'",
+            "name": "one_published_revision_per_locale"
+          }
+        ],
+        "x-checks": [
+          "publish only when item translations cover EVERY item of the version"
+        ]
+      },
+      "standard_item_translation": {
+        "type": "object",
+        "x-table": "standard_item_translation",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_translation_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_item_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "standard_translation_id",
+          "standard_item_id",
+          "title",
+          "body"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "standard_translation_id"
+            ],
+            "references": {
+              "table": "standard_translation",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          },
+          {
+            "columns": [
+              "standard_item_id"
+            ],
+            "references": {
+              "table": "standard_item",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "standard_translation_id",
+              "standard_item_id"
+            ]
+          }
+        ]
+      },
+      "directory_contact": {
+        "type": "object",
+        "x-table": "directory_contact",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "kind": {
+            "$ref": "#/$defs/ContactKind"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "province": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "zalo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "province",
+          "locality",
+          "address",
+          "phone",
+          "zalo",
+          "contact_url",
+          "source_link",
+          "verified_at",
+          "source_locale",
+          "status",
+          "revision",
+          "reviewed_at"
+        ],
+        "x-checks": [
+          "phone IS NOT NULL OR zalo IS NOT NULL OR contact_url IS NOT NULL"
+        ]
+      },
+      "directory_contact_translation": {
+        "type": "object",
+        "x-table": "directory_contact_translation",
+        "x-group": "content",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "directory_contact_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "specialty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/ContentStatus"
+          }
+        },
+        "required": [
+          "id",
+          "directory_contact_id",
+          "locale",
+          "specialty",
+          "description",
+          "revision",
+          "status"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "directory_contact_id"
+            ],
+            "references": {
+              "table": "directory_contact",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-unique": [
+          {
+            "columns": [
+              "directory_contact_id",
+              "locale"
+            ]
+          }
+        ],
+        "x-checks": [
+          "phone / zalo / link are never copied per translation"
+        ]
+      },
+      "content_release": {
+        "type": "object",
+        "x-table": "content_release",
+        "x-group": "ops",
+        "x-primaryKey": [
+          "release_no"
+        ],
+        "properties": {
+          "release_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "available_locales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Locale"
+            }
+          },
+          "manifest": {
+            "type": "object",
+            "description": "Lists id / version / revision / hash / tombstone of every entry."
+          },
+          "checksum": {
+            "$ref": "#/$defs/Sha256"
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        },
+        "required": [
+          "release_no",
+          "schema_version",
+          "available_locales",
+          "manifest",
+          "checksum",
+          "created_at"
+        ],
+        "x-checks": [
+          "the current-release pointer moves only after text, index and assets are complete"
+        ]
+      },
+      "admin_member": {
+        "type": "object",
+        "x-table": "admin_member",
+        "x-group": "ops",
+        "x-primaryKey": [
+          "user_id"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/$defs/Uuid"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "user_id"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          }
+        ],
+        "x-checks": [
+          "granted by the backend only; never inferred from email"
+        ]
+      },
+      "user_preferences": {
+        "type": "object",
+        "x-table": "user_preferences",
+        "x-group": "ops",
+        "x-primaryKey": [
+          "user_id"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ai_consent_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ai_consented_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user_id",
+          "locale",
+          "revision",
+          "ai_consent_version",
+          "ai_consented_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "user_id"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          }
+        ]
+      },
+      "chat_report": {
+        "type": "object",
+        "x-table": "chat_report",
+        "x-group": "ops",
+        "x-primaryKey": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "user_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Citation"
+            }
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/$defs/ChatReportStatus"
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "question",
+          "answer",
+          "citations",
+          "reason",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "user_id"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "restrict"
+          }
+        ],
+        "x-checks": [
+          "holds only the parts the farmer confirmed; no full conversation, no farm data"
+        ],
+        "x-indexes": [
+          [
+            "status",
+            "created_at"
+          ]
+        ]
+      },
+      "mutation_receipt": {
+        "type": "object",
+        "x-table": "mutation_receipt",
+        "x-group": "ops",
+        "x-primaryKey": [
+          "user_id",
+          "mutation_id"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "mutation_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "payload_hash": {
+            "$ref": "#/$defs/Sha256"
+          },
+          "result": {
+            "type": "object",
+            "description": "The MutationResult returned the first time. No photos, no sensitive text."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        },
+        "required": [
+          "user_id",
+          "mutation_id",
+          "payload_hash",
+          "result",
+          "created_at"
+        ],
+        "x-foreignKeys": [
+          {
+            "columns": [
+              "user_id"
+            ],
+            "references": {
+              "table": "auth_user",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          }
+        ],
+        "x-checks": [
+          "same id + same hash returns the stored result; same id + different hash is rejected (mutation_id_reused)"
+        ]
+      },
+      "$comment": "Database truth: one entry per table (32 tables + external auth_user). Wire shapes are in `entities`."
+    },
+    "entities": {
+      "Farm": {
+        "type": "object",
+        "x-table": "farm",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "province": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locality_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "name",
+          "province",
+          "locality_text"
+        ],
+        "description": "A farmer's garden. Owner is the Auth subject, never an email."
+      },
+      "Plot": {
+        "type": "object",
+        "x-table": "plot",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "farm_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "variety": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "area_ha": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Decimal"
+                  }
+                ],
+                "description": "Hectares. Not negative."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tree_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planted_year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1900,
+                "maximum": 2100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "farm_id",
+          "name",
+          "variety",
+          "area_ha",
+          "tree_count",
+          "planted_year"
+        ]
+      },
+      "Season": {
+        "type": "object",
+        "x-table": "season",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plot_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "started_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "stage": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/SeasonStage"
+              }
+            ],
+            "description": "Set by hand. No computed growth percentage."
+          },
+          "expected_harvest_on": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DateString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_on": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/DateString"
+                  }
+                ],
+                "description": "Set when the farmer closes the season."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_yield_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Kg"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_price_vnd_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_total_cost_vnd": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_updated_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Server sets it when any forecast_* value changes."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "plot_id",
+          "name",
+          "started_on",
+          "stage",
+          "expected_harvest_on",
+          "closed_on",
+          "forecast_yield_kg",
+          "forecast_price_vnd_kg",
+          "forecast_total_cost_vnd",
+          "forecast_updated_at"
+        ]
+      },
+      "CareLog": {
+        "type": "object",
+        "x-table": "care_log",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/CareKind"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CareInput"
+            },
+            "description": "Replace-all: the list sent is the full list after the write."
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "case_id",
+          "photo_id",
+          "occurred_on",
+          "kind",
+          "note",
+          "inputs"
+        ],
+        "description": "Wire shape embeds its care_input rows as `inputs` (replace-all on write)."
+      },
+      "Expense": {
+        "type": "object",
+        "x-table": "expense",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "care_log_id": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Uuid"
+                  }
+                ],
+                "description": "Set when the cost was entered from a care log."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "category": {
+            "$ref": "#/$defs/ExpenseCategory"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "care_log_id",
+          "occurred_on",
+          "category",
+          "amount_vnd",
+          "note"
+        ]
+      },
+      "Sale": {
+        "type": "object",
+        "x-table": "sale",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "buyer_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agreed_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "status": {
+            "$ref": "#/$defs/SaleStatus"
+          },
+          "total_vnd": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Vnd"
+                  }
+                ],
+                "description": "null while provisional and not agreed. Required once confirmed."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/KgPositive"
+                  }
+                ],
+                "description": "Optional; whole-lot sales need no weight."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "buyer_name",
+          "agreed_on",
+          "status",
+          "total_vnd",
+          "weight_kg",
+          "note"
+        ]
+      },
+      "SalePayment": {
+        "type": "object",
+        "x-table": "sale_payment",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/PaymentKind"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "sale_id",
+          "occurred_on",
+          "kind",
+          "amount_vnd",
+          "note"
+        ]
+      },
+      "DiseaseCase": {
+        "type": "object",
+        "x-table": "disease_case",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "opened_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Set only by the farmer. Inference never closes a case."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "opened_at",
+          "closed_at",
+          "location_note",
+          "note"
+        ]
+      },
+      "MediaAsset": {
+        "type": "object",
+        "x-table": "media_asset",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "object_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable storage key. Not a signed URL."
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "$ref": "#/$defs/Sha256"
+          },
+          "status": {
+            "$ref": "#/$defs/MediaStatus"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "object_key",
+          "mime_type",
+          "size_bytes",
+          "sha256",
+          "status"
+        ],
+        "description": "Private photo. Created through /v1/media/prepare, not through /v1/sync."
+      },
+      "Scan": {
+        "type": "object",
+        "x-table": "scan",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "captured_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "plant_part": {
+            "$ref": "#/$defs/PlantPart"
+          },
+          "outcome": {
+            "$ref": "#/$defs/ScanOutcome"
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Only when the class maps to a known disease. Never invented."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Score"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "predictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Prediction"
+            }
+          },
+          "inference_metadata": {
+            "$ref": "#/$defs/InferenceMetadata"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "case_id",
+          "photo_id",
+          "captured_at",
+          "plant_part",
+          "outcome",
+          "disease_code",
+          "score",
+          "label_snapshot",
+          "label_locale",
+          "predictions",
+          "inference_metadata"
+        ],
+        "description": "Immutable snapshot of one inference. Later model changes never re-run history."
+      },
+      "SelfCheck": {
+        "type": "object",
+        "x-table": "self_check",
+        "properties": {
+          "id": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              }
+            ],
+            "description": "Client-generated UUID."
+          },
+          "revision": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/Revision"
+              }
+            ],
+            "description": "Bumped by the server on every accepted write; sent back as expected_revision."
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Tombstone. Kept in the snapshot so deletes sync."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_version_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SelfCheckAnswer"
+            },
+            "description": "Replace-all: one mutation saves the whole checklist."
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "standard_version_id",
+          "answers"
+        ],
+        "description": "One checklist per season and standard version. Locale is not part of the key. Wire shape embeds `answers`."
+      }
+    },
+    "EntityCreate": {
+      "Farm": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "province": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locality_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "Plot": {
+        "type": "object",
+        "properties": {
+          "farm_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "variety": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "area_ha": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Decimal"
+                  }
+                ],
+                "description": "Hectares. Not negative."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tree_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planted_year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1900,
+                "maximum": 2100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "farm_id",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "Season": {
+        "type": "object",
+        "properties": {
+          "plot_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "started_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "stage": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/SeasonStage"
+              }
+            ],
+            "description": "Set by hand. No computed growth percentage."
+          },
+          "expected_harvest_on": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DateString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_on": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/DateString"
+                  }
+                ],
+                "description": "Set when the farmer closes the season."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_yield_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Kg"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_price_vnd_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_total_cost_vnd": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "plot_id",
+          "name",
+          "started_on",
+          "stage"
+        ],
+        "additionalProperties": false
+      },
+      "CareLog": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/CareKind"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CareInputWrite"
+            },
+            "description": "Replace-all: the list sent is the full list after the write."
+          }
+        },
+        "required": [
+          "season_id",
+          "occurred_on",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "if": {
+          "properties": {
+            "kind": {
+              "enum": [
+                "fertilizing",
+                "spraying"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "then": {
+          "required": [
+            "inputs"
+          ],
+          "properties": {
+            "inputs": {
+              "minItems": 1
+            }
+          }
+        }
+      },
+      "Expense": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "care_log_id": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Uuid"
+                  }
+                ],
+                "description": "Set when the cost was entered from a care log."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "category": {
+            "$ref": "#/$defs/ExpenseCategory"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "season_id",
+          "occurred_on",
+          "category",
+          "amount_vnd"
+        ],
+        "additionalProperties": false
+      },
+      "Sale": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "buyer_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agreed_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "status": {
+            "$ref": "#/$defs/SaleStatus"
+          },
+          "total_vnd": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Vnd"
+                  }
+                ],
+                "description": "null while provisional and not agreed. Required once confirmed."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/KgPositive"
+                  }
+                ],
+                "description": "Optional; whole-lot sales need no weight."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "season_id",
+          "buyer_name",
+          "agreed_on",
+          "status"
+        ],
+        "additionalProperties": false,
+        "if": {
+          "properties": {
+            "status": {
+              "const": "confirmed"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        "then": {
+          "required": [
+            "total_vnd"
+          ],
+          "properties": {
+            "total_vnd": {
+              "$ref": "#/$defs/Vnd"
+            }
+          }
+        }
+      },
+      "SalePayment": {
+        "type": "object",
+        "properties": {
+          "sale_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/PaymentKind"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sale_id",
+          "occurred_on",
+          "kind",
+          "amount_vnd"
+        ],
+        "additionalProperties": false
+      },
+      "DiseaseCase": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "opened_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Set only by the farmer. Inference never closes a case."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "season_id",
+          "opened_at"
+        ],
+        "additionalProperties": false
+      },
+      "Scan": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "captured_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "plant_part": {
+            "$ref": "#/$defs/PlantPart"
+          },
+          "outcome": {
+            "$ref": "#/$defs/ScanOutcome"
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Only when the class maps to a known disease. Never invented."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Score"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "predictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Prediction"
+            }
+          },
+          "inference_metadata": {
+            "$ref": "#/$defs/InferenceMetadata"
+          }
+        },
+        "required": [
+          "season_id",
+          "photo_id",
+          "captured_at",
+          "plant_part",
+          "outcome",
+          "predictions",
+          "inference_metadata"
+        ],
+        "additionalProperties": false
+      },
+      "SelfCheck": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_version_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SelfCheckAnswer"
+            },
+            "description": "Replace-all: one mutation saves the whole checklist."
+          }
+        },
+        "required": [
+          "season_id",
+          "standard_version_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "EntityPatch": {
+      "Farm": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "province": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locality_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "Plot": {
+        "type": "object",
+        "properties": {
+          "farm_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "variety": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "area_ha": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Decimal"
+                  }
+                ],
+                "description": "Hectares. Not negative."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tree_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planted_year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1900,
+                "maximum": 2100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "Season": {
+        "type": "object",
+        "properties": {
+          "plot_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "started_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "stage": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/SeasonStage"
+              }
+            ],
+            "description": "Set by hand. No computed growth percentage."
+          },
+          "expected_harvest_on": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DateString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_on": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/DateString"
+                  }
+                ],
+                "description": "Set when the farmer closes the season."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_yield_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Kg"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_price_vnd_kg": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_total_cost_vnd": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Vnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "CareLog": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/CareKind"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CareInputWrite"
+            },
+            "description": "Replace-all: the list sent is the full list after the write."
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "Expense": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "care_log_id": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Uuid"
+                  }
+                ],
+                "description": "Set when the cost was entered from a care log."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "category": {
+            "$ref": "#/$defs/ExpenseCategory"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "Sale": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "buyer_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agreed_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "status": {
+            "$ref": "#/$defs/SaleStatus"
+          },
+          "total_vnd": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Vnd"
+                  }
+                ],
+                "description": "null while provisional and not agreed. Required once confirmed."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/KgPositive"
+                  }
+                ],
+                "description": "Optional; whole-lot sales need no weight."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "SalePayment": {
+        "type": "object",
+        "properties": {
+          "sale_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "occurred_on": {
+            "$ref": "#/$defs/DateString"
+          },
+          "kind": {
+            "$ref": "#/$defs/PaymentKind"
+          },
+          "amount_vnd": {
+            "$ref": "#/$defs/VndPositive"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "DiseaseCase": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "opened_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  }
+                ],
+                "description": "Set only by the farmer. Inference never closes a case."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "Scan": {
+        "type": "object",
+        "properties": {
+          "case_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "A saved scan is an immutable snapshot. Only case_id may change (attach to or detach from a case of the same season)."
+      },
+      "SelfCheck": {
+        "type": "object",
+        "properties": {
+          "season_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "standard_version_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SelfCheckAnswer"
+            },
+            "description": "Replace-all: one mutation saves the whole checklist."
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      }
+    },
+    "content": {
+      "Disease": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "names": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "vi",
+                "en"
+              ]
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "names"
+        ]
+      },
+      "Article": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "version_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "version_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "translation_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale",
+            "description": "Locale of the text returned."
+          },
+          "is_fallback": {
+            "type": "boolean",
+            "description": "True when the version has no translation for the UI language and its own source text is shown. Never text from another version."
+          },
+          "source_locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plant_parts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "published_at": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "version_id",
+          "version_no",
+          "translation_revision",
+          "locale",
+          "is_fallback",
+          "source_locale",
+          "title",
+          "body",
+          "category",
+          "disease_code",
+          "plant_parts",
+          "stages",
+          "source_links",
+          "published_at"
+        ]
+      },
+      "StandardItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid",
+            "description": "Stable inside the version. Ticks key on it."
+          },
+          "item_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sort_order": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "source_link": {
+            "type": "string"
+          },
+          "source_checked_at": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "item_key",
+          "sort_order",
+          "title",
+          "body",
+          "source_link",
+          "source_checked_at"
+        ]
+      },
+      "StandardVersion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "profile_id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "version_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "effective_on": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DateString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "locale": {
+            "$ref": "#/$defs/Locale"
+          },
+          "is_fallback": {
+            "type": "boolean"
+          },
+          "source_links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/content/StandardItem"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "profile_id",
+          "version_no",
+          "effective_on",
+          "source_locale",
+          "locale",
+          "is_fallback",
+          "source_links",
+          "items"
+        ],
+        "description": "A translation is published only when it covers every item; otherwise the whole source text of this version is returned with is_fallback = true."
+      },
+      "StandardProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "market_code": {
+            "type": "string",
+            "examples": [
+              "CN",
+              "EU"
+            ]
+          },
+          "product_form_code": {
+            "type": "string",
+            "examples": [
+              "fresh"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "published_version_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "market_code",
+          "product_form_code",
+          "name",
+          "published_version_id"
+        ],
+        "description": "CN/fresh and EU/fresh must exist. published_version_id = null renders the empty state, never sample items."
+      },
+      "Contact": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "kind": {
+            "$ref": "#/$defs/ContactKind"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "province": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "zalo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "specialty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "province",
+          "locality",
+          "address",
+          "phone",
+          "zalo",
+          "contact_url",
+          "source_link",
+          "verified_at",
+          "description",
+          "specialty"
+        ],
+        "description": "At least one of phone, zalo, contact_url is not null."
+      },
+      "ContentManifest": {
+        "type": "object",
+        "properties": {
+          "release_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "available_locales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Locale"
+            }
+          },
+          "checksum": {
+            "$ref": "#/$defs/Sha256"
+          },
+          "created_at": {
+            "$ref": "#/$defs/Timestamp"
+          }
+        },
+        "required": [
+          "release_no",
+          "schema_version",
+          "available_locales",
+          "checksum",
+          "created_at"
+        ]
+      },
+      "ContentRelease": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/content/ContentManifest"
+          }
+        ],
+        "type": "object",
+        "properties": {
+          "diseases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/content/Disease"
+            }
+          },
+          "articles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/content/Article"
+            }
+          },
+          "standard_profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/content/StandardProfile"
+            }
+          },
+          "standard_versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/content/StandardVersion"
+            }
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/content/Contact"
+            }
+          },
+          "tombstones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "description": "Ids removed since the previous release."
+          }
+        },
+        "required": [
+          "diseases",
+          "articles",
+          "standard_profiles",
+          "standard_versions",
+          "contacts",
+          "tombstones"
+        ],
+        "description": "A whole approved release. The app downloads it to staging, checks the hash, then swaps it in atomically. A failed download keeps the previous release. Empty arrays are real: the app shows an empty state. Versions referenced by a citation or a self-check stay available."
+      }
+    },
+    "MutationOp": {
+      "oneOf": [
+        {
+          "title": "upsert farm",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "farm"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/Farm"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/Farm"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete farm",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "farm"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert plot",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "plot"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/Plot"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/Plot"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete plot",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "plot"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert season",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "season"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/Season"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/Season"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete season",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "season"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert care_log",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "care_log"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/CareLog"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/CareLog"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete care_log",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "care_log"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert expense",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "expense"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/Expense"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/Expense"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete expense",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "expense"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert sale",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "sale"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/Sale"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/Sale"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete sale",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "sale"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert sale_payment",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "sale_payment"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/SalePayment"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/SalePayment"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete sale_payment",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "sale_payment"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert disease_case",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "disease_case"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/DiseaseCase"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/DiseaseCase"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete disease_case",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "disease_case"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert scan",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "scan"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/Scan"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/Scan"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete scan",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "scan"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "upsert self_check",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "self_check"
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/Revision"
+                }
+              ],
+              "description": "null creates the row; otherwise the revision the client last saw."
+            },
+            "data": {
+              "$ref": "#/$defs/EntityPatch/SelfCheck"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision",
+            "data"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "expected_revision": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/EntityCreate/SelfCheck"
+              }
+            }
+          }
+        },
+        {
+          "title": "delete self_check",
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "self_check"
+            },
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "expected_revision": {
+              "$ref": "#/$defs/Revision"
+            }
+          },
+          "required": [
+            "entity",
+            "op",
+            "id",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "One write. `data` carries business fields only; id, revision, timestamps and owner are server-owned."
+    },
+    "Mutation": {
+      "type": "object",
+      "properties": {
+        "mutation_id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "One user action = one id. Keep it across retries."
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MutationOp"
+          },
+          "minItems": 1,
+          "maxItems": 50
+        }
+      },
+      "required": [
+        "mutation_id",
+        "ops"
+      ],
+      "description": "All ops commit together or not at all. Same mutation_id + same payload returns the first answer."
+    },
+    "MutationRow": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "farm"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/Farm"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "plot"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/Plot"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "season"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/Season"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "care_log"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/CareLog"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "expense"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/Expense"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "sale"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/Sale"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "sale_payment"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/SalePayment"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "disease_case"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/DiseaseCase"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "scan"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/Scan"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity": {
+              "const": "self_check"
+            },
+            "row": {
+              "$ref": "#/$defs/entities/SelfCheck"
+            }
+          },
+          "required": [
+            "entity",
+            "row"
+          ]
+        }
+      ]
+    },
+    "MutationResult": {
+      "oneOf": [
+        {
+          "title": "applied",
+          "type": "object",
+          "properties": {
+            "mutation_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "status": {
+              "const": "applied"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MutationRow"
+              }
+            },
+            "as_of": {
+              "$ref": "#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "mutation_id",
+            "status",
+            "rows",
+            "as_of"
+          ],
+          "description": "Rows as written, with the new revisions."
+        },
+        {
+          "title": "conflict",
+          "type": "object",
+          "properties": {
+            "mutation_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "status": {
+              "const": "conflict"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MutationRow"
+              }
+            },
+            "as_of": {
+              "$ref": "#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "mutation_id",
+            "status",
+            "rows",
+            "as_of"
+          ],
+          "description": "revision_conflict (409 semantics). Nothing was written. `rows` are the server's current rows so the farmer can discard the local edit or re-enter it."
+        },
+        {
+          "title": "rejected",
+          "type": "object",
+          "properties": {
+            "mutation_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "status": {
+              "const": "rejected"
+            },
+            "code": {
+              "type": "string"
+            },
+            "field": {
+              "type": "string"
+            },
+            "details": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "field",
+                  "code"
+                ]
+              }
+            },
+            "as_of": {
+              "$ref": "#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "mutation_id",
+            "status",
+            "code",
+            "as_of"
+          ],
+          "description": "422 semantics. Nothing was written. `code` is from the error-code catalog in api_contract.json. `field` is a dotted path like ops.1.data.amount_vnd."
+        }
+      ]
+    },
+    "SyncRequest": {
+      "type": "object",
+      "properties": {
+        "mutations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mutation"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "mutations"
+      ]
+    },
+    "SyncResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MutationResult"
+          },
+          "description": "One per request mutation, same order."
+        }
+      },
+      "required": [
+        "results"
+      ]
+    },
+    "Snapshot": {
+      "type": "object",
+      "properties": {
+        "as_of": {
+          "$ref": "#/$defs/Timestamp",
+          "description": "When the server built it."
+        },
+        "farms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/Farm"
+          }
+        },
+        "plots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/Plot"
+          }
+        },
+        "seasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/Season"
+          }
+        },
+        "care_logs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/CareLog"
+          }
+        },
+        "expenses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/Expense"
+          }
+        },
+        "sales": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/Sale"
+          }
+        },
+        "sale_payments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/SalePayment"
+          }
+        },
+        "disease_cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/DiseaseCase"
+          }
+        },
+        "media_assets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/MediaAsset"
+          }
+        },
+        "scans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/Scan"
+          }
+        },
+        "self_checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entities/SelfCheck"
+          }
+        }
+      },
+      "required": [
+        "as_of",
+        "farms",
+        "plots",
+        "seasons",
+        "care_logs",
+        "expenses",
+        "sales",
+        "sale_payments",
+        "disease_cases",
+        "media_assets",
+        "scans",
+        "self_checks"
+      ],
+      "description": "Everything the user has had acknowledged, tombstones (deleted_at != null) included, so a new or long-offline phone never revives a deleted row. Unsynced local data is not here."
+    }
+  }
+}
