@@ -14,7 +14,6 @@ from app.api.errors import ApiError
 from app.domain.errors import ErrorCode
 from app.sync.receipts import iso, utcnow_ms
 
-Locale = Literal["vi", "en"]
 Status = Literal["draft", "in_review", "approved", "published", "unpublished"]
 Action = Literal["submit_review", "approve", "publish", "unpublish", "reject_to_draft"]
 
@@ -54,31 +53,6 @@ def new_id() -> UUID:
     return uuid.uuid4()
 
 
-def latest_by(rows: list[dict[str, Any]], key: str, value: str) -> dict[str, Any] | None:
-    """Highest revision of the translations whose `key` equals `value`."""
-    same = [r for r in rows if r[key] == value]
-    return max(same, key=lambda r: r["revision_no"], default=None)
-
-
-def go_live(translations: list[dict[str, Any]], now: datetime) -> list[dict[str, Any]]:
-    """Newest revision per locale becomes published, any older published one is retired."""
-    newest = {t["locale"]: latest_by(translations, "locale", t["locale"]) for t in translations}
-    out = []
-    for t in translations:
-        if t is newest[t["locale"]]:
-            t = {**t, "status": "published", "published_at": now}
-        elif t["status"] == "published":
-            t = {**t, "status": "unpublished"}
-        out.append(t)
-    return out
-
-
-def take_down(translations: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {**t, "status": "unpublished"} if t["status"] == "published" else t for t in translations
-    ]
-
-
 async def page(
     db: AsyncDatabase,  # type: ignore[type-arg]
     coll: str,
@@ -115,29 +89,21 @@ async def page(
 SCHEMA_VERSION = 1
 
 
-def article_row(v: dict[str, Any], t: dict[str, Any]) -> dict[str, Any]:
-    """The wire `Article` for one translation revision of a version."""
+def article_row(v: dict[str, Any]) -> dict[str, Any]:
+    """The wire `Article` for one published version."""
     return {
         "id": v["article_id"],
         "version_id": v["_id"],
         "version_no": v["version_no"],
-        "translation_revision": t["revision_no"],
-        "locale": t["locale"],
-        "is_fallback": False,
-        "source_locale": v["source_locale"],
-        "title": t["title"],
-        "body": t["body"],
+        "title": v["title"],
+        "body": v["body"],
         "category": v["category"],
         "disease_code": v["disease_code"],
         "plant_parts": v["plant_parts"],
         "stages": v["stages"],
         "source_links": v["source_links"],
-        "published_at": iso(t.get("published_at") or v["published_at"] or v["created_at"]),
+        "published_at": iso(v["published_at"] or v["created_at"]),
     }
-
-
-def _published(translations: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [t for t in translations if t["status"] == "published"]
 
 
 def _ids(pack: dict[str, Any]) -> set[str]:
@@ -151,7 +117,7 @@ async def build_pack(db: AsyncDatabase) -> dict[str, Any]:  # type: ignore[type-
     """Everything published right now, in the shape of the app's `ContentRelease`."""
     articles: list[dict[str, Any]] = []
     async for v in db["article_versions"].find({"status": "published"}).sort("_id"):
-        articles += [article_row(v, t) for t in _published(v["translations"])]
+        articles.append(article_row(v))
     codes = sorted({a["disease_code"] for a in articles if a["disease_code"]})
 
     profiles, versions = [], []
@@ -161,34 +127,30 @@ async def build_pack(db: AsyncDatabase) -> dict[str, Any]:  # type: ignore[type-
         if p["published_version_id"]:
             live = await db["standard_versions"].find_one({"_id": p["published_version_id"]})
         if live and live["status"] == "published":
-            for t in _published(live["translations"]):
-                by_item = {i["standard_item_id"]: i for i in t["items"]}
-                versions.append(
-                    {
-                        "id": live["_id"],
-                        "profile_id": p["_id"],
-                        "version_no": live["version_no"],
-                        "effective_on": live["effective_on"],
-                        "source_locale": live["source_locale"],
-                        "locale": t["locale"],
-                        "is_fallback": False,
-                        "source_links": live["source_links"],
-                        "items": [
-                            {
-                                "id": i["id"],
-                                "item_key": i["item_key"],
-                                "sort_order": i["sort_order"],
-                                "title": by_item[i["id"]]["title"],
-                                "body": by_item[i["id"]].get("body") or "",
-                                "source_link": i["source_link"],
-                                "source_checked_at": iso(i["source_checked_at"]),
-                            }
-                            for i in sorted(live["items"], key=lambda i: i["sort_order"])
-                        ],
-                    }
-                )
-            first = _published(live["translations"])
-            name = first[0]["title"] if first else name
+            versions.append(
+                {
+                    "id": live["_id"],
+                    "profile_id": p["_id"],
+                    "version_no": live["version_no"],
+                    "title": live["title"],
+                    "description": live.get("description"),
+                    "effective_on": live["effective_on"],
+                    "source_links": live["source_links"],
+                    "items": [
+                        {
+                            "id": i["id"],
+                            "item_key": i["item_key"],
+                            "sort_order": i["sort_order"],
+                            "title": i["title"],
+                            "body": i.get("body") or "",
+                            "source_link": i["source_link"],
+                            "source_checked_at": iso(i["source_checked_at"]),
+                        }
+                        for i in sorted(live["items"], key=lambda i: i["sort_order"])
+                    ],
+                }
+            )
+            name = live["title"]
         profiles.append(
             {
                 "id": p["_id"],
@@ -201,12 +163,6 @@ async def build_pack(db: AsyncDatabase) -> dict[str, Any]:  # type: ignore[type-
 
     contacts = []
     async for c in db["directory_contacts"].find({"status": "published"}).sort("_id"):
-        # Contact translations store `revision`; latest_by expects `revision_no`.
-        text = latest_by(
-            [{**t, "revision_no": t.get("revision", 0)} for t in c["translations"]], "locale", "vi"
-        ) or (
-            c["translations"][0] if c["translations"] else {}
-        )
         contacts.append(
             {
                 **{
@@ -225,8 +181,8 @@ async def build_pack(db: AsyncDatabase) -> dict[str, Any]:  # type: ignore[type-
                 },
                 "id": c["_id"],
                 "verified_at": iso(c["verified_at"]) if c.get("verified_at") else None,
-                "description": text.get("description"),
-                "specialty": text.get("specialty"),
+                "description": c.get("description"),
+                "specialty": c.get("specialty"),
             }
         )
     return {
@@ -256,9 +212,6 @@ async def cut_release(db: AsyncDatabase) -> dict[str, Any]:  # type: ignore[type
     previous = await db["content_releases"].find_one({"state": "current"})
     pack["tombstones"] = sorted(_ids(previous["pack"]) - _ids(pack)) if previous else []
     no = (last["release_no"] if last else 0) + 1
-    locales = sorted(
-        {a["locale"] for a in pack["articles"]} | {v["locale"] for v in pack["standard_versions"]}
-    )
     await db["content_releases"].update_many({"state": "current"}, {"$set": {"state": "ready"}})
     release = {
         "_id": new_id(),
@@ -268,9 +221,9 @@ async def cut_release(db: AsyncDatabase) -> dict[str, Any]:  # type: ignore[type
         "checksum": hashlib.sha256(
             json.dumps(pack, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest(),
-        "available_locales": locales or ["vi"],
         "index_version": f"idx-{no}",
         "error": None,
+        "index_state": "pending",  # RAG chunks not yet reconciled (app/rag/indexer.py)
         "pack": pack,
     }
     await db["content_releases"].insert_one(release)

@@ -317,7 +317,6 @@ async def seed_content(db) -> None:  # type: ignore[no-untyped-def]
             {
                 "$setOnInsert": {
                     "_id": uuid.uuid4(),
-                    "source_locale": "vi",
                     "published_version_id": None,
                     "created_at": now,
                 }

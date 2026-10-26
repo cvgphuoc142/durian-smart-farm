@@ -1,15 +1,17 @@
 """Admin content API: articles, standards, contacts, releases and chat reports.
 
-Documents (Mongo): `knowledge_articles` + `article_versions` (translations embedded),
-`standard_profiles` + `standard_versions` (items and translations embedded),
-`directory_contacts` (translations embedded), `content_releases`, `chat_reports`.
+Documents (Mongo): `knowledge_articles` + `article_versions`,
+`standard_profiles` + `standard_versions` (items embedded),
+`directory_contacts`, `content_releases`, `chat_reports`. Content has one text, no per-language
+copies.
 """
 
+from collections.abc import AsyncIterator
 from datetime import date, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.asynchronous.database import AsyncDatabase
 
@@ -18,22 +20,38 @@ from app.api.errors import ApiError
 from app.content.workflow import (
     WORKING,
     Action,
-    Locale,
     Status,
     cut_release,
-    go_live,
-    latest_by,
     new_id,
     next_status,
     page,
     require_draft,
-    take_down,
     wire,
 )
 from app.domain.errors import ErrorCode
+from app.rag.indexer import reindex
 from app.sync.receipts import utcnow_ms
 
-router = APIRouter(prefix="/v1/admin", tags=["Admin"], dependencies=[Depends(require_admin)])
+
+async def reindex_after(request: Request) -> AsyncIterator[None]:
+    """A request that cut a release leaves RAG stale; reconcile once it has been handled.
+    Failure is recorded on the release (`error`, retry via /releases/retry), never raised."""
+    yield
+    state = request.app.state
+    if state.embedder is None:
+        return
+    pending = await state.db["content_releases"].find_one(
+        {"state": "current", "index_state": "pending"}
+    )
+    if pending is not None:
+        await reindex(state.db, state.embedder, state.vectors)
+
+
+router = APIRouter(
+    prefix="/v1/admin",
+    tags=["Admin"],
+    dependencies=[Depends(require_admin), Depends(reindex_after)],
+)
 
 Db = Annotated[AsyncDatabase[Any], Depends(get_database)]
 Admin = Annotated[CurrentUser, Depends(require_admin)]
@@ -65,9 +83,13 @@ def _links(links: list[str]) -> list[str]:
 
 
 class ArticleVersionBody(BaseModel):
+    """One article text. There is a single language: whatever the editor writes is what is shown."""
+
     model_config = ConfigDict(extra="forbid")
 
-    source_locale: Locale
+    title: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    search_keywords: list[str] = []
     category: str | None = None
     disease_code: str | None = None
     source_links: list[str] = []
@@ -75,16 +97,8 @@ class ArticleVersionBody(BaseModel):
     stages: list[str] = []
 
 
-class ArticleTranslationBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = Field(min_length=1)
-    body: str = Field(min_length=1)
-    search_keywords: list[str] = []
-
-
 def _article_version_wire(v: dict[str, Any]) -> dict[str, Any]:
-    return wire(v) | {"translations": [wire(t) for t in v["translations"]]}
+    return wire(v)
 
 
 async def _refresh_article(db: Any, article_id: UUID) -> None:
@@ -94,9 +108,6 @@ async def _refresh_article(db: Any, article_id: UUID) -> None:
     )
     if latest is None:
         return
-    shown = latest_by(latest["translations"], "locale", "vi") or latest_by(
-        latest["translations"], "locale", latest["source_locale"]
-    )
     await db["knowledge_articles"].update_one(
         {"_id": article_id},
         {
@@ -104,7 +115,7 @@ async def _refresh_article(db: Any, article_id: UUID) -> None:
                 "latest_version_id": latest["_id"],
                 "latest_version_no": latest["version_no"],
                 "latest_status": latest["status"],
-                "title": shown["title"] if shown else None,
+                "title": latest["title"],
                 "disease_code": latest["disease_code"],
             }
         },
@@ -134,7 +145,6 @@ async def _insert_article_version(
         "reviewed_by": None,
         "published_at": None,
         "created_at": utcnow_ms(),
-        "translations": [],
     }
     await db["article_versions"].insert_one(version)
     await _refresh_article(db, article_id)
@@ -210,38 +220,6 @@ async def edit_article_version(
     return _article_version_wire(await _one(db, "article_versions", version_id))
 
 
-@router.put(
-    "/article-versions/{version_id}/translations/{locale}",
-    operation_id="adminPutArticleTranslation",
-)
-async def put_article_translation(
-    version_id: UUID, locale: Locale, body: ArticleTranslationBody, db: Db
-) -> dict[str, Any]:
-    v = await _one(db, "article_versions", version_id)
-    live = v["status"] == "published"
-    prev = latest_by(v["translations"], "locale", locale)
-    rev = {
-        "id": new_id(),
-        "article_version_id": version_id,
-        "locale": locale,
-        "revision_no": (prev["revision_no"] if prev else 0) + 1,
-        "status": "published" if live else "draft",
-        **body.model_dump(),
-        "reviewed_by": None,
-        "published_at": utcnow_ms() if live else None,
-    }
-    translations = [*v["translations"], rev]
-    if live:
-        translations = go_live(translations, rev["published_at"])
-    await db["article_versions"].update_one(
-        {"_id": version_id}, {"$set": {"translations": translations}}
-    )
-    await _refresh_article(db, v["article_id"])
-    if live:
-        await cut_release(db)
-    return rev
-
-
 @router.post("/article-versions/{version_id}/transition", operation_id="adminArticleTransition")
 async def article_transition(
     version_id: UUID, body: Transition, db: Db, admin: Admin
@@ -254,11 +232,7 @@ async def article_transition(
         changes["reviewed_by"] = admin.id
     if body.action == "publish":
         _links(v["source_links"])
-        if not v["translations"]:
-            raise ApiError(
-                ErrorCode.validation_failed, "Add a translation first.", field="translations"
-            )
-        changes |= {"translations": go_live(v["translations"], now), "published_at": now}
+        changes["published_at"] = now
         await db["article_versions"].update_many(
             {"article_id": v["article_id"], "status": "published"},
             {"$set": {"status": "unpublished"}},
@@ -267,7 +241,6 @@ async def article_transition(
             {"_id": v["article_id"]}, {"$set": {"published_version_id": version_id}}
         )
     if body.action == "unpublish":
-        changes["translations"] = take_down(v["translations"])
         await db["knowledge_articles"].update_one(
             {"_id": v["article_id"], "published_version_id": version_id},
             {"$set": {"published_version_id": None}},
@@ -287,6 +260,8 @@ class StandardItemBody(BaseModel):
 
     id: UUID | None = None
     item_key: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    body: str | None = None
     source_link: str = ""
     source_checked_at: datetime
     sort_order: int
@@ -295,26 +270,11 @@ class StandardItemBody(BaseModel):
 class StandardVersionBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source_locale: Locale
+    title: str = Field(min_length=1)
+    description: str | None = None
     source_links: list[str] = []
     effective_on: date | None = None
     items: list[StandardItemBody]
-
-
-class StandardItemTranslation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    standard_item_id: UUID
-    title: str = Field(min_length=1)
-    body: str | None = None
-
-
-class StandardTranslationBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = Field(min_length=1)
-    description: str | None = None
-    items: list[StandardItemTranslation]
 
 
 def _items(version_id: UUID, items: list[StandardItemBody]) -> list[dict[str, Any]]:
@@ -330,6 +290,8 @@ def _items(version_id: UUID, items: list[StandardItemBody]) -> list[dict[str, An
                 "id": i.id or new_id(),
                 "standard_version_id": version_id,
                 "item_key": i.item_key,
+                "title": i.title,
+                "body": i.body,
                 "source_link": i.source_link.strip(),
                 "source_checked_at": i.source_checked_at,
                 "sort_order": i.sort_order,
@@ -338,12 +300,8 @@ def _items(version_id: UUID, items: list[StandardItemBody]) -> list[dict[str, An
     return out
 
 
-def _covers(translation: dict[str, Any], items: list[dict[str, Any]]) -> bool:
-    return {i["id"] for i in items} <= {t["standard_item_id"] for t in translation["items"]}
-
-
 def _standard_wire(v: dict[str, Any]) -> dict[str, Any]:
-    return wire(v, drop=("items", "translations", "created_at"))
+    return wire(v, drop=("items", "created_at"))
 
 
 @router.get("/standards", operation_id="adminListStandards")
@@ -382,7 +340,6 @@ async def get_standard(profile_id: UUID, db: Db) -> dict[str, Any]:
             {
                 "version": _standard_wire(v),
                 "items": sorted((wire(i) for i in v["items"]), key=lambda i: i["sort_order"]),
-                "translations": [wire(t) for t in v["translations"]],
             }
             for v in versions
         ],
@@ -411,14 +368,14 @@ async def new_standard_version(
         "standard_profile_id": profile_id,
         "version_no": (last["version_no"] if last else 0) + 1,
         "status": "draft",
-        "source_locale": body.source_locale,
+        "title": body.title,
+        "description": body.description,
         "source_links": [x.strip() for x in body.source_links if x.strip()],
         "effective_on": body.effective_on.isoformat() if body.effective_on else None,
         "reviewed_by": None,
         "published_at": None,
         "created_at": utcnow_ms(),
         "items": _items(version_id, body.items),
-        "translations": [],
     }
     await db["standard_versions"].insert_one(version)
     return _standard_wire(version)
@@ -434,7 +391,8 @@ async def replace_standard_draft(
         {"_id": version_id},
         {
             "$set": {
-                "source_locale": body.source_locale,
+                "title": body.title,
+                "description": body.description,
                 "source_links": [x.strip() for x in body.source_links if x.strip()],
                 "effective_on": body.effective_on.isoformat() if body.effective_on else None,
                 "items": _items(version_id, body.items),
@@ -442,40 +400,6 @@ async def replace_standard_draft(
         },
     )
     return _standard_wire(await _one(db, "standard_versions", version_id))
-
-
-@router.put(
-    "/standard-versions/{version_id}/translations/{locale}",
-    operation_id="adminPutStandardTranslation",
-)
-async def put_standard_translation(
-    version_id: UUID, locale: Locale, body: StandardTranslationBody, db: Db
-) -> dict[str, Any]:
-    v = await _one(db, "standard_versions", version_id)
-    known = {i["id"] for i in v["items"]}
-    if any(t.standard_item_id not in known for t in body.items):
-        raise ApiError(ErrorCode.validation_failed, "Unknown item.", field="items")
-    live = v["status"] == "published"
-    prev = latest_by(v["translations"], "locale", locale)
-    rev = {
-        "id": new_id(),
-        "standard_version_id": version_id,
-        "locale": locale,
-        "revision_no": (prev["revision_no"] if prev else 0) + 1,
-        "status": "published" if live else "draft",
-        **body.model_dump(),
-    }
-    if live and not _covers(rev, v["items"]):
-        raise ApiError(ErrorCode.translation_incomplete)
-    translations = [*v["translations"], rev]
-    if live:
-        translations = go_live(translations, utcnow_ms())
-    await db["standard_versions"].update_one(
-        {"_id": version_id}, {"$set": {"translations": translations}}
-    )
-    if live:
-        await cut_release(db)
-    return wire(rev)
 
 
 @router.post("/standard-versions/{version_id}/transition", operation_id="adminStandardTransition")
@@ -491,15 +415,7 @@ async def standard_transition(
     if body.action == "publish":
         if not v["items"]:
             raise ApiError(ErrorCode.source_missing, field="items")
-        locales = {t["locale"] for t in v["translations"]}
-        if not locales:
-            raise ApiError(ErrorCode.translation_incomplete)
-        for loc in locales:
-            if not _covers(
-                latest_by(v["translations"], "locale", loc) or {"items": []}, v["items"]
-            ):
-                raise ApiError(ErrorCode.translation_incomplete, field="translations")
-        changes |= {"translations": go_live(v["translations"], now), "published_at": now}
+        changes["published_at"] = now
         await db["standard_versions"].update_many(
             {"standard_profile_id": v["standard_profile_id"], "status": "published"},
             {"$set": {"status": "unpublished"}},
@@ -508,7 +424,6 @@ async def standard_transition(
             {"_id": v["standard_profile_id"]}, {"$set": {"published_version_id": version_id}}
         )
     if body.action == "unpublish":
-        changes["translations"] = take_down(v["translations"])
         await db["standard_profiles"].update_one(
             {"_id": v["standard_profile_id"], "published_version_id": version_id},
             {"$set": {"published_version_id": None}},
@@ -535,12 +450,6 @@ class ContactBody(BaseModel):
     contact_url: str | None = None
     source_link: str | None = None
     verified_at: datetime | None = None
-    source_locale: Locale
-
-
-class ContactTranslationBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     specialty: str | None = None
     description: str | None = None
 
@@ -551,7 +460,7 @@ def _need_channel(c: dict[str, Any]) -> None:
 
 
 def _contact_wire(c: dict[str, Any]) -> dict[str, Any]:
-    return wire(c, drop=("translations", "created_at"))
+    return wire(c, drop=("created_at",))
 
 
 @router.get("/contacts", operation_id="adminListContacts")
@@ -576,7 +485,6 @@ async def create_contact(body: ContactBody, db: Db) -> dict[str, Any]:
         "revision": 1,
         "reviewed_at": None,
         "created_at": utcnow_ms(),
-        "translations": [],
     }
     _need_channel(contact)
     await db["directory_contacts"].insert_one(contact)
@@ -596,33 +504,6 @@ async def edit_contact(contact_id: UUID, body: ContactBody, db: Db) -> dict[str,
     return _contact_wire(await _one(db, "directory_contacts", contact_id))
 
 
-@router.put(
-    "/contacts/{contact_id}/translations/{locale}", operation_id="adminPutContactTranslation"
-)
-async def put_contact_translation(
-    contact_id: UUID, locale: Locale, body: ContactTranslationBody, db: Db
-) -> dict[str, Any]:
-    c = await _one(db, "directory_contacts", contact_id)
-    prev = latest_by(
-        [{**t, "revision_no": t["revision"]} for t in c["translations"]], "locale", locale
-    )
-    row = {
-        "id": prev["id"] if prev else new_id(),
-        "directory_contact_id": contact_id,
-        "locale": locale,
-        **body.model_dump(),
-        "revision": (prev["revision"] if prev else 0) + 1,
-        "status": c["status"],
-    }
-    others = [t for t in c["translations"] if t["locale"] != locale]
-    await db["directory_contacts"].update_one(
-        {"_id": contact_id}, {"$set": {"translations": [*others, row]}}
-    )
-    if c["status"] == "published":
-        await cut_release(db)
-    return row
-
-
 @router.post("/contacts/{contact_id}/transition", operation_id="adminContactTransition")
 async def contact_transition(
     contact_id: UUID, body: Transition, db: Db, admin: Admin
@@ -631,10 +512,7 @@ async def contact_transition(
     target = next_status(c["status"], body.action)
     if body.action == "publish":
         _need_channel(c)
-    changes: dict[str, Any] = {
-        "status": target,
-        "translations": [{**t, "status": target} for t in c["translations"]],
-    }
+    changes: dict[str, Any] = {"status": target}
     if body.action == "approve":
         changes["reviewed_at"] = utcnow_ms()
     await db["directory_contacts"].update_one({"_id": contact_id}, {"$set": changes})
@@ -649,7 +527,10 @@ async def contact_transition(
 @router.get("/releases", operation_id="adminListReleases")
 async def list_releases(db: Db, limit: Limit = 25, cursor: str | None = None) -> dict[str, Any]:
     rows, nxt = await page(db, "content_releases", {}, limit, cursor)
-    return {"items": [wire(r, drop=("_id", "pack")) for r in rows], "next_cursor": nxt}
+    return {
+        "items": [wire(r, drop=("_id", "pack", "index_state")) for r in rows],
+        "next_cursor": nxt,
+    }
 
 
 @router.post("/releases/retry", operation_id="adminRetryRelease", status_code=202)
@@ -658,7 +539,11 @@ async def retry_release(db: Db) -> dict[str, Any]:
     last = await db["content_releases"].find_one(sort=[("release_no", -1)])
     if last is None or last["state"] == "failed":
         last = await cut_release(db)
-    return wire(last, drop=("_id", "pack"))
+    elif last.get("index_state") == "failed":
+        await db["content_releases"].update_one(
+            {"_id": last["_id"]}, {"$set": {"index_state": "pending"}}
+        )  # reindex_after picks it up
+    return wire(last, drop=("_id", "pack", "index_state"))
 
 
 @router.get("/chat-reports", operation_id="adminListChatReports")

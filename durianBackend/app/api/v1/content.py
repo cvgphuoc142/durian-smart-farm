@@ -3,12 +3,12 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.api.deps import current_user, get_database
 from app.api.errors import ApiError
-from app.content.workflow import SCHEMA_VERSION, Locale, article_row, cut_release
+from app.content.workflow import SCHEMA_VERSION, article_row, cut_release
 from app.domain.errors import ErrorCode
 from app.sync.receipts import iso
 
@@ -21,7 +21,6 @@ def _manifest(r: dict[str, Any]) -> dict[str, Any]:
     return {
         "release_no": r["release_no"],
         "schema_version": SCHEMA_VERSION,
-        "available_locales": r["available_locales"],
         "checksum": r["checksum"],
         "created_at": iso(r["created_at"]),
     }
@@ -47,20 +46,11 @@ async def release(release_no: int, db: Db) -> dict[str, Any]:
 
 
 @router.get("/article-versions/{version_id}", operation_id="getArticleVersionText")
-async def article_version_text(
-    version_id: UUID, db: Db, locale: Locale, revision: Annotated[int, Query(ge=1)]
-) -> dict[str, Any]:
+async def article_version_text(version_id: UUID, db: Db) -> dict[str, Any]:
+    """The exact text of a version a citation points at (it may have been unpublished since)."""
     v = await db["article_versions"].find_one(
         {"_id": version_id, "status": {"$in": ["published", "unpublished"]}}
     )
-    t = next(
-        (
-            t
-            for t in (v or {}).get("translations", [])
-            if t["locale"] == locale and t["revision_no"] == revision and t["status"] != "draft"
-        ),
-        None,
-    )
-    if v is None or t is None:
+    if v is None:
         raise ApiError(ErrorCode.not_found)
-    return {k: (str(x) if isinstance(x, UUID) else x) for k, x in article_row(v, t).items()}
+    return {k: (str(x) if isinstance(x, UUID) else x) for k, x in article_row(v).items()}
