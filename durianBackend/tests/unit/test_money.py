@@ -1,4 +1,4 @@
-"""Every `x-derivedMetrics.testVectors` entry in contract/schema.json (AC-03..06)."""
+"""Derived-metric test vectors (AC-03..06)."""
 
 from decimal import Decimal
 
