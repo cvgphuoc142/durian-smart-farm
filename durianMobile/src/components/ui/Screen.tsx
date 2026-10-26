@@ -1,7 +1,15 @@
-import type { ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -25,7 +33,18 @@ export interface ScreenProps {
   topInset?: boolean;
   background?: string;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Ref to the scroll view, e.g. to scroll a chat to its newest message. */
+  scrollRef?: Ref<ScrollView>;
+  /** Pull-to-refresh handler; defaults to the app-wide one. Only used when `scroll` is on. */
+  onRefresh?: Refresh;
 }
+
+type Refresh = () => Promise<unknown>;
+
+const RefreshContext = createContext<Refresh | null>(null);
+
+/** What pull-to-refresh does on every scrolling `Screen` that does not pass its own `onRefresh`. */
+export const ScreenRefreshProvider = RefreshContext.Provider;
 
 export function Screen({
   children,
@@ -36,8 +55,20 @@ export function Screen({
   topInset = true,
   background = colors.bg,
   contentStyle,
+  onRefresh,
+  scrollRef,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const inherited = useContext(RefreshContext);
+  const refresh = onRefresh ?? inherited;
+  const [refreshing, setRefreshing] = useState(false);
+  const pull = useCallback(() => {
+    if (!refresh) return;
+    setRefreshing(true);
+    refresh()
+      .catch(() => undefined)
+      .finally(() => setRefreshing(false));
+  }, [refresh]);
   const bottomPad = withTabBar ? sizes.tabBar + insets.bottom + spacing.lg : spacing.xxl;
 
   return (
@@ -48,10 +79,14 @@ export function Screen({
       {header}
       {scroll ? (
         <ScrollView
+          ref={scrollRef}
           style={styles.flex}
           contentContainerStyle={[{ paddingBottom: footer ? spacing.lg : bottomPad }, contentStyle]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            refresh ? <RefreshControl refreshing={refreshing} onRefresh={pull} /> : undefined
+          }
         >
           {children}
         </ScrollView>

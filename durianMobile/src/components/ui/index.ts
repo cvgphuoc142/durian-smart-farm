@@ -1,7 +1,7 @@
 export { Text, type TextProps } from './Text';
 export { Icon, type IconName, type IconProps } from './Icon';
 
-export { Screen, type ScreenProps } from './Screen';
+export { Screen, ScreenRefreshProvider, type ScreenProps } from './Screen';
 export { Header, type HeaderProps } from './Header';
 export { Section, type SectionProps } from './Section';
 export { Divider } from './Divider';

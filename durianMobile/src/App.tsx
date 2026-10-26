@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient, syncOnlineManager } from '@/api';
-import { ContentSyncHost, ScanSyncHost } from '@/components/domain';
+import { ContentSyncHost, PullRefreshHost, ScanSyncHost } from '@/components/domain';
 import { OfflineBannerHost, ToastProvider } from '@/components/ui';
 import '@/i18n';
 import { RootNavigator } from '@/navigation';
@@ -34,9 +34,11 @@ export default function App() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
-          <OfflineBannerHost>
-            <RootNavigator />
-          </OfflineBannerHost>
+          <PullRefreshHost>
+            <OfflineBannerHost>
+              <RootNavigator />
+            </OfflineBannerHost>
+          </PullRefreshHost>
           <ScanSyncHost />
           <ContentSyncHost />
           <StatusBar style="dark" />
