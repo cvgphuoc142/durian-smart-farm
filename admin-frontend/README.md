@@ -11,4 +11,4 @@ npm run dev              # http://localhost:5174
 Sign in with username + password (`POST /v1/auth/admin-login`). Dev seed (`make seed` in durianBackend): `admin` / `123456`.
 
 Sections: Articles, Standards, Contacts, Chat reports. Content follows the
-draft → in_review → approved → published workflow; translations create new revisions.
+draft → in_review → approved → published workflow. Each item has a single text (no per-language copies).
