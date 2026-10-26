@@ -8,7 +8,7 @@ A FastAPI and MongoDB app for offline-first sync of household data. Phases 0-3 a
 
 ```bash
 cd durianBackend
-make up          # Mongo (Atlas-local, replica set) via docker
+make up          # Mongo (plain mongo:7, single-node replica set) + Qdrant via docker
 make seed        # load demo data (safe to repeat)
 make dev         # API on http://localhost:8000
 ```
@@ -30,7 +30,13 @@ Other commands:
 | `make check` | Lint, typecheck and test |
 | `make down` | Stop the containers |
 
-MinIO is not started by `make up`. Nothing uses it until Phase 5 (media), and its public image is no longer pullable. It sits behind the `storage` compose profile.
+MinIO is not started by `make up`; nothing uses it until Phase 5 (media). Upstream `minio/minio` and `quay.io/minio/minio` no longer publish images, so compose uses `cgr.dev/chainguard/minio:latest` (same S3 API). Start it with `make storage` (API :9000, console :9001).
+
+## Chat and RAG
+
+Set `GEMINI_API_KEY` in `.env`. The provider is chosen by `LLM_PROVIDER` (`app/llm/factory.py`); to add another LLM, implement `LlmClient` and `Embedder` from `app/llm/base.py` and add a branch in the factory. Chunk vectors live in a separate vector DB, Qdrant (`QDRANT_URL`, `QDRANT_COLLECTION`; `QDRANT_URL=:memory:` runs it in-process for tests), not in Mongo. The embedding model (`Embedder`) embeds the chunks at index time and the question at retrieval time. Publishing or unpublishing an article reconciles the chunks; a failed run sets `error` on the release and `POST /v1/admin/releases/retry` re-runs it. Changing `EMBEDDING_DIM` or the embedding model rebuilds the collection on the next reindex. `RAG_MIN_SCORE` is a raw cosine similarity.
+
+Articles, standards and contacts hold **one text** written by the editor: there is no per-language translation, `locale`, `is_fallback` or `translation_revision` in the admin or content API. Editing a published article/standard means a new version; a published contact is edited in place and cuts a release.
 
 ## What you can test
 
@@ -99,4 +105,4 @@ The seed ([scripts/seed.py](scripts/seed.py)) goes through the real sync engine,
 ## Notes
 
 - `APP_ENV` defaults to `prod`. `.env` sets `dev`, which enables the `dev:` tokens. Never set `dev` on a deployed server.
-- The Mongo URI uses `directConnection=true` and no `replicaSet` name. The Atlas-local image names its replica set after the container ID.
+- The Mongo URI uses `directConnection=true` and no `replicaSet` name. The compose file starts `mongo:7` as replica set `rs0` and initiates it from its healthcheck.
