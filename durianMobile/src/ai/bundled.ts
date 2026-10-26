@@ -6,10 +6,13 @@ import { parseManifest } from './manifest';
  * `assets/models/`, list it here with a static `require`, and add its entry to `manifest.json`.
  * Metro needs the `require` to be static, so this cannot be built from the manifest.
  *
- * Empty until the model provider delivers the files; Scan then has no body parts to offer.
+ * `manifest.json` and the files are generated from the model handoff by
+ * `scripts/build-model-manifest.mjs`.
  */
 export const bundledArtifacts: Record<string, number> = {
-  // 'leaf-v1.onnx': require('../../assets/models/leaf-v1.onnx'),
+  'leaf-4186d615.onnx': require('../../assets/models/leaf-4186d615.onnx'),
+  'stem-4186d615.onnx': require('../../assets/models/stem-4186d615.onnx'),
+  'fruit-4186d615.onnx': require('../../assets/models/fruit-4186d615.onnx'),
 };
 
 export const bundledManifest: unknown = require('../../assets/models/manifest.json');

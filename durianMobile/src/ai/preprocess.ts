@@ -34,3 +34,41 @@ export function centerCrop(srcW: number, srcH: number, dstW: number, dstH: numbe
   const height = Math.round(srcW / target);
   return { originX: 0, originY: Math.round((srcH - height) / 2), width: srcW, height };
 }
+
+/** Size of the image whose longer side is `side`, as the model was trained (each dimension rounded). */
+export function fitInside(srcW: number, srcH: number, side: number) {
+  const ratio = side / Math.max(srcW, srcH);
+  return {
+    width: Math.max(1, Math.round(srcW * ratio)),
+    height: Math.max(1, Math.round(srcH * ratio)),
+  };
+}
+
+/** Puts RGBA pixels in the centre of a `size`×`size` canvas filled with `pad` (letterbox). */
+export function letterbox(
+  rgba: ArrayLike<number>,
+  width: number,
+  height: number,
+  size: number,
+  pad: readonly [number, number, number],
+) {
+  const out = new Uint8ClampedArray(size * size * 4);
+  for (let p = 0; p < size * size; p++) {
+    out[p * 4] = pad[0];
+    out[p * 4 + 1] = pad[1];
+    out[p * 4 + 2] = pad[2];
+    out[p * 4 + 3] = 255;
+  }
+  const left = Math.floor((size - width) / 2);
+  const top = Math.floor((size - height) / 2);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const src = (y * width + x) * 4;
+      const dst = ((top + y) * size + left + x) * 4;
+      out[dst] = rgba[src];
+      out[dst + 1] = rgba[src + 1];
+      out[dst + 2] = rgba[src + 2];
+    }
+  }
+  return out;
+}

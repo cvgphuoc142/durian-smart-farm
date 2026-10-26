@@ -43,12 +43,16 @@ export const modelEntrySchema = z
       scale: z.number().positive(),
       mean: z.tuple([z.number(), z.number(), z.number()]),
       std: z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]),
-      resize: z.enum(['stretch', 'center_crop']),
+      resize: z.enum(['stretch', 'center_crop', 'letterbox']),
+      /** `letterbox` only: RGB (0–255) of the padding around the image. */
+      pad: z.tuple([z.number(), z.number(), z.number()]).optional(),
     }),
     output: z.object({
       name: z.string().min(1),
       /** What the raw output is: logits, or already probabilities. */
-      activation: z.enum(['softmax', 'sigmoid', 'none']),
+      activation: z.enum(['softmax', 'sigmoid', 'none', 'temperature_softmax']),
+      /** `temperature_softmax` only: softmax(logits / T). */
+      temperature: z.number().positive().optional(),
     }),
     classes: z.array(classEntry).min(2),
     rules: z.object({
@@ -57,9 +61,21 @@ export const modelEntrySchema = z
       healthy_min: unit,
       /** Optional: top-1 must beat top-2 by this much, else the answer is "inconclusive". */
       margin_min: unit.optional(),
+      /** Optional: energy -T·log Σ exp(z/T) above this means the photo is out of distribution. */
+      energy_max: z.number().optional(),
     }),
   })
   .superRefine((e, ctx) => {
+    if (e.input.resize === 'letterbox' && !e.input.pad) {
+      ctx.addIssue({ code: 'custom', path: ['input', 'pad'], message: 'letterbox needs a pad' });
+    }
+    if (e.output.activation === 'temperature_softmax' && !e.output.temperature) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['output', 'temperature'],
+        message: 'temperature_softmax needs a temperature',
+      });
+    }
     const seen = new Set<number>();
     e.classes.forEach((c, i) => {
       if (seen.has(c.index)) {

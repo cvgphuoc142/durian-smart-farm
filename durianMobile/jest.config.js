@@ -2,6 +2,8 @@ module.exports = {
   preset: 'jest-expo',
   setupFiles: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
+    // Model files are bundled assets; tests never read them.
+    '\\.onnx$': '<rootDir>/src/test/fileStub.js',
     '^@/(.*)$': '<rootDir>/src/$1',
     // The ESM build is .mjs, which jest does not transform; use the CJS build.
     '^lucide-react-native$': '<rootDir>/node_modules/lucide-react-native/dist/cjs/lucide-react-native.js',

@@ -2,7 +2,7 @@ import { entry } from '@/test/scanFixtures';
 
 import { decode, normalize, ScanRuntimeError } from './decode';
 import { parseManifest } from './manifest';
-import { centerCrop, tensorDims, toTensorData } from './preprocess';
+import { centerCrop, fitInside, letterbox, tensorDims, toTensorData } from './preprocess';
 import { runScan } from './router';
 import { _stubManifestForTest, loadManifest, stubEngine } from './stub';
 
@@ -47,14 +47,19 @@ describe('manifest', () => {
     expect(parseManifest({ nope: true }, has).entries).toEqual([]);
   });
 
-  it('the bundled manifest has no model yet, so the release build lists no part', () => {
-    expect(loadManifest({ stub: false }).entries).toEqual([]);
+  it('the bundled manifest lists leaf, stem and fruit, none of which claims to see a healthy plant', () => {
+    const { entries, rejected } = loadManifest({ stub: false });
+    expect(rejected).toEqual([]);
+    expect(entries.map((e) => e.plant_part)).toEqual(['leaf', 'stem', 'fruit']);
+    expect(entries.every((e) => e.classes.every((c) => c.kind === 'disease'))).toBe(true);
   });
 
   it('the dev stub entries are valid and only appear when asked for', () => {
     expect(_stubManifestForTest().entries).toHaveLength(1);
+    // The real model of a part wins over the stub, so with all three bundled no stub is added.
     const parts = loadManifest({ stub: true }).entries.map((e) => e.plant_part);
-    expect(parts).toEqual(['leaf', 'fruit']);
+    expect(parts).toEqual(['leaf', 'stem', 'fruit']);
+    expect(loadManifest({ stub: true }).entries.some((e) => e.stub)).toBe(false);
   });
 });
 
@@ -170,7 +175,7 @@ describe('router', () => {
   });
 
   it('the stub gives the same answer for the same photo', async () => {
-    const stub = loadManifest({ stub: true }).entries[0];
+    const stub = _stubManifestForTest().entries[0];
     const a = await stubEngine.classify(stub, 'file:///1.jpg');
     const b = await stubEngine.classify(stub, 'file:///1.jpg');
     expect(a).toEqual(b);
@@ -207,5 +212,13 @@ describe('preprocess', () => {
       width: 200,
       height: 200,
     });
+  });
+
+  it('letterbox: longer side fits, the image sits in the centre, the rest is padding', () => {
+    expect(fitInside(400, 200, 224)).toEqual({ width: 224, height: 112 });
+    const px = new Array(4 * 2 * 4).fill(10); // 4×2 image
+    const out = letterbox(px, 4, 2, 4, [1, 2, 3]);
+    expect(Array.from(out.slice(0, 4))).toEqual([1, 2, 3, 255]); // top row is padding
+    expect(Array.from(out.slice(4 * 4, 4 * 4 + 4))).toEqual([10, 10, 10, 255]); // row 1 is image
   });
 });

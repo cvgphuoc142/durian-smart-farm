@@ -6,7 +6,7 @@ import { InferenceSession, Tensor } from 'onnxruntime-react-native';
 import { bundledArtifacts } from './bundled';
 import { ScanRuntimeError } from './decode';
 import type { ModelEntry } from './manifest';
-import { centerCrop, tensorDims, toTensorData } from './preprocess';
+import { centerCrop, fitInside, letterbox, tensorDims, toTensorData } from './preprocess';
 import type { InferenceEngine } from './router';
 
 const sessions = new Map<string, Promise<InferenceSession>>();
@@ -36,6 +36,16 @@ const fromBase64 = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCode
 async function pixels(uri: string, input: ModelEntry['input']) {
   try {
     let source = ImageManipulator.manipulate(uri);
+    if (input.resize === 'letterbox' && input.pad) {
+      const full = await source.renderAsync();
+      const fit = fitInside(full.width, full.height, Math.max(input.width, input.height));
+      const resized = await ImageManipulator.manipulate(full).resize(fit).renderAsync();
+      const saved = await resized.saveAsync({ format: SaveFormat.JPEG, compress: 1, base64: true });
+      if (!saved.base64) throw new Error('no pixels');
+      const image = jpeg.decode(fromBase64(saved.base64), { useTArray: true, formatAsRGBA: true });
+      if (image.width !== fit.width || image.height !== fit.height) throw new Error('size');
+      return letterbox(image.data, image.width, image.height, input.width, input.pad);
+    }
     if (input.resize === 'center_crop') {
       const full = await source.renderAsync();
       source = ImageManipulator.manipulate(full).crop(

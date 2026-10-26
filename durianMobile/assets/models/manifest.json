@@ -1,4 +1,305 @@
 {
   "schema_version": 1,
-  "entries": []
+  "entries": [
+    {
+      "model_id": "durianos_leaf",
+      "version": "4186d61589811679d85bcc33",
+      "pipeline_version": "js-letterbox-1",
+      "threshold_version": "energy-4186d615",
+      "plant_part": "leaf",
+      "part_labels": {
+        "vi": "Lá",
+        "en": "Leaf"
+      },
+      "runtime": "onnx",
+      "artifact": {
+        "path": "leaf-4186d615.onnx",
+        "sha256": "030e4aee3cb38241d0d75da3bf15c6e23c54742b941187287ebbea627c5c6a1b"
+      },
+      "input": {
+        "name": "image",
+        "width": 224,
+        "height": 224,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 0.00392156862745098,
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "resize": "letterbox",
+        "pad": [
+          124,
+          116,
+          104
+        ]
+      },
+      "output": {
+        "name": "logits",
+        "activation": "temperature_softmax",
+        "temperature": 0.08208547373001032
+      },
+      "classes": [
+        {
+          "index": 0,
+          "kind": "disease",
+          "disease_code": "leaf__anthracnose_disease",
+          "labels": {
+            "vi": "Bệnh thán thư",
+            "en": "Anthracnose"
+          }
+        },
+        {
+          "index": 1,
+          "kind": "disease",
+          "disease_code": "leaf__canker_disease",
+          "labels": {
+            "vi": "Bệnh loét",
+            "en": "Canker"
+          }
+        },
+        {
+          "index": 2,
+          "kind": "disease",
+          "disease_code": "leaf__mealybug_infestation",
+          "labels": {
+            "vi": "Rệp sáp",
+            "en": "Mealybug infestation"
+          }
+        },
+        {
+          "index": 3,
+          "kind": "disease",
+          "disease_code": "leaf__pink_disease",
+          "labels": {
+            "vi": "Bệnh hồng",
+            "en": "Pink disease"
+          }
+        },
+        {
+          "index": 4,
+          "kind": "disease",
+          "disease_code": "leaf__sooty_mold",
+          "labels": {
+            "vi": "Bệnh muội đen",
+            "en": "Sooty mold"
+          }
+        },
+        {
+          "index": 5,
+          "kind": "disease",
+          "disease_code": "leaf__stem_blight",
+          "labels": {
+            "vi": "Bệnh cháy thân",
+            "en": "Stem blight"
+          }
+        },
+        {
+          "index": 6,
+          "kind": "disease",
+          "disease_code": "leaf__thrips_disease",
+          "labels": {
+            "vi": "Bọ trĩ",
+            "en": "Thrips"
+          }
+        },
+        {
+          "index": 7,
+          "kind": "disease",
+          "disease_code": "leaf__yellow_leaf",
+          "labels": {
+            "vi": "Vàng lá",
+            "en": "Yellow leaf"
+          }
+        }
+      ],
+      "rules": {
+        "suspected_min": 0,
+        "healthy_min": 1,
+        "energy_max": 0.4258773028956204
+      }
+    },
+    {
+      "model_id": "durianos_stem",
+      "version": "4186d61589811679d85bcc33",
+      "pipeline_version": "js-letterbox-1",
+      "threshold_version": "energy-4186d615",
+      "plant_part": "stem",
+      "part_labels": {
+        "vi": "Thân / cành",
+        "en": "Stem / branch"
+      },
+      "runtime": "onnx",
+      "artifact": {
+        "path": "stem-4186d615.onnx",
+        "sha256": "1bb78add61d62b5e13eced5b11b20f8eaf5f85ebfc75203e9880e2d2a540217d"
+      },
+      "input": {
+        "name": "image",
+        "width": 224,
+        "height": 224,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 0.00392156862745098,
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "resize": "letterbox",
+        "pad": [
+          124,
+          116,
+          104
+        ]
+      },
+      "output": {
+        "name": "logits",
+        "activation": "temperature_softmax",
+        "temperature": 0.08208529950108324
+      },
+      "classes": [
+        {
+          "index": 0,
+          "kind": "disease",
+          "disease_code": "stem__mealybug_infestation",
+          "labels": {
+            "vi": "Rệp sáp",
+            "en": "Mealybug infestation"
+          }
+        },
+        {
+          "index": 1,
+          "kind": "disease",
+          "disease_code": "stem__pink_disease",
+          "labels": {
+            "vi": "Bệnh hồng",
+            "en": "Pink disease"
+          }
+        },
+        {
+          "index": 2,
+          "kind": "disease",
+          "disease_code": "stem__sooty_mold",
+          "labels": {
+            "vi": "Bệnh muội đen",
+            "en": "Sooty mold"
+          }
+        },
+        {
+          "index": 3,
+          "kind": "disease",
+          "disease_code": "stem__stem_cracking_gummosis",
+          "labels": {
+            "vi": "Nứt thân chảy mủ",
+            "en": "Stem cracking and gummosis"
+          }
+        }
+      ],
+      "rules": {
+        "suspected_min": 0,
+        "healthy_min": 1,
+        "energy_max": 0.9890331732674555
+      }
+    },
+    {
+      "model_id": "durianos_fruit",
+      "version": "4186d61589811679d85bcc33",
+      "pipeline_version": "js-letterbox-1",
+      "threshold_version": "energy-4186d615",
+      "plant_part": "fruit",
+      "part_labels": {
+        "vi": "Quả",
+        "en": "Fruit"
+      },
+      "runtime": "onnx",
+      "artifact": {
+        "path": "fruit-4186d615.onnx",
+        "sha256": "f1b0da5672b85c4d3b3709ae6513f7e584b221934e8b586dcb85c4ac09b58f99"
+      },
+      "input": {
+        "name": "image",
+        "width": 224,
+        "height": 224,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 0.00392156862745098,
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "resize": "letterbox",
+        "pad": [
+          124,
+          116,
+          104
+        ]
+      },
+      "output": {
+        "name": "logits",
+        "activation": "temperature_softmax",
+        "temperature": 0.08208529950108324
+      },
+      "classes": [
+        {
+          "index": 0,
+          "kind": "disease",
+          "disease_code": "fruit__fruit_rot",
+          "labels": {
+            "vi": "Thối trái",
+            "en": "Fruit rot"
+          }
+        },
+        {
+          "index": 1,
+          "kind": "disease",
+          "disease_code": "fruit__mealybug_infestation",
+          "labels": {
+            "vi": "Rệp sáp",
+            "en": "Mealybug infestation"
+          }
+        },
+        {
+          "index": 2,
+          "kind": "disease",
+          "disease_code": "fruit__sooty_mold",
+          "labels": {
+            "vi": "Bệnh muội đen",
+            "en": "Sooty mold"
+          }
+        },
+        {
+          "index": 3,
+          "kind": "disease",
+          "disease_code": "fruit__thrips_disease",
+          "labels": {
+            "vi": "Bọ trĩ",
+            "en": "Thrips"
+          }
+        }
+      ],
+      "rules": {
+        "suspected_min": 0,
+        "healthy_min": 1,
+        "energy_max": 0.5793548828676336
+      }
+    }
+  ]
 }

@@ -3,14 +3,26 @@ import type { Locale, Prediction, ScanOutcome } from '@/types';
 import type { ClassEntry, ModelEntry } from './manifest';
 
 /** Raw output → probabilities, as the manifest says the output is. */
-export function normalize(raw: ArrayLike<number>, activation: ModelEntry['output']['activation']) {
+export function normalize(
+  raw: ArrayLike<number>,
+  activation: ModelEntry['output']['activation'],
+  temperature = 1,
+) {
   const v = Array.from(raw);
   if (activation === 'none') return v;
   if (activation === 'sigmoid') return v.map((x) => 1 / (1 + Math.exp(-x)));
-  const max = Math.max(...v);
-  const exps = v.map((x) => Math.exp(x - max));
+  const t = activation === 'temperature_softmax' ? temperature : 1;
+  const max = Math.max(...v) / t;
+  const exps = v.map((x) => Math.exp(x / t - max));
   const sum = exps.reduce((a, b) => a + b, 0);
   return exps.map((x) => x / sum);
+}
+
+/** Energy score −T·log Σ exp(z/T) of the raw logits; the higher, the less the photo looks like training data. */
+export function energy(raw: ArrayLike<number>, temperature: number) {
+  const scaled = Array.from(raw).map((x) => x / temperature);
+  const max = Math.max(...scaled);
+  return -temperature * (max + Math.log(scaled.reduce((a, x) => a + Math.exp(x - max), 0)));
 }
 
 export interface Decoded {
@@ -41,7 +53,7 @@ function labelOf(c: ClassEntry, locale: Locale): { label: string; locale: Locale
  * carries no label and no disease: nothing is invented.
  */
 export function decode(entry: ModelEntry, raw: ArrayLike<number>, locale: Locale): Decoded {
-  const scores = normalize(raw, entry.output.activation);
+  const scores = normalize(raw, entry.output.activation, entry.output.temperature);
   if (scores.length === 0 || scores.some((s) => !Number.isFinite(s))) {
     throw new ScanRuntimeError('bad_output');
   }
@@ -67,7 +79,12 @@ export function decode(entry: ModelEntry, raw: ArrayLike<number>, locale: Locale
   const [top, second] = ranked;
   const c = byIndex.get(top.index);
   if (!c || c.kind === 'other') return inconclusive;
-  const { margin_min, suspected_min, healthy_min } = entry.rules;
+  const { margin_min, suspected_min, healthy_min, energy_max } = entry.rules;
+  if (energy_max != null && entry.output.temperature != null) {
+    const e = energy(raw, entry.output.temperature);
+    if (!Number.isFinite(e)) throw new ScanRuntimeError('bad_output');
+    if (e > energy_max) return inconclusive;
+  }
   if (margin_min != null && second && top.score - second.score < margin_min) return inconclusive;
 
   if (c.kind === 'healthy') {
