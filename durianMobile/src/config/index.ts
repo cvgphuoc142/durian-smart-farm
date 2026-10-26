@@ -1,3 +1,10 @@
+/**
+ * Languages the user can pick. The app is Vietnamese only for now; the English catalog and the
+ * language pickers stay in the code. To bring English back, add `'en'` here.
+ */
+export const ENABLED_LOCALES: readonly ('vi' | 'en')[] = ['vi'];
+export const DEFAULT_LOCALE: 'vi' | 'en' = 'vi';
+
 /** Base URL of the REST API. */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com';
 
@@ -16,9 +23,8 @@ export const MOCK_LATENCY_MS = process.env.NODE_ENV === 'test' ? 0 : 250;
 /** Version of the consent text for the external AI service. Raise it when the text changes. */
 export const AI_CONSENT_VERSION = 1;
 
-/** Pages the store listing and the settings screen point to. Set the real ones before release. */
-export const POLICY_URL = process.env.EXPO_PUBLIC_POLICY_URL ?? 'https://example.com/privacy';
-export const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL ?? 'https://example.com/support';
-/** Where a farmer who cannot open the app asks for the account to be deleted (FR-X09). */
-export const DELETION_REQUEST_URL =
-  process.env.EXPO_PUBLIC_DELETION_URL ?? 'https://example.com/delete-account';
+/** Google OAuth client IDs (Cloud Console → Google Auth Platform → Clients). The web ID is the token audience. */
+export const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+export const GOOGLE_IOS_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ??
+  '353834200795-82pgepighrng8kf3i76ul0krbim9no0e.apps.googleusercontent.com';

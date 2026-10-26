@@ -59,3 +59,10 @@ jest.mock('expo-sqlite', () => {
     },
   };
 });
+
+// Google sign-in is a native module; the tests use the mock API path and never reach it.
+jest.mock('@react-native-google-signin/google-signin', () => ({
+  GoogleSignin: { configure: jest.fn(), hasPlayServices: jest.fn(), signIn: jest.fn() },
+  isCancelledResponse: (r) => r?.type === 'cancelled',
+  isSuccessResponse: (r) => r?.type === 'success',
+}));

@@ -48,7 +48,13 @@
       ],
       "expo-asset",
       "expo-sqlite",
-      "onnxruntime-react-native"
+      "onnxruntime-react-native",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.353834200795-82pgepighrng8kf3i76ul0krbim9no0e"
+        }
+      ]
     ]
   }
 }

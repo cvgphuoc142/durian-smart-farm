@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button, Chip, ChipRow, InfoBanner, Screen, Text } from '@/components/ui';
+import { ENABLED_LOCALES } from '@/config';
 import { useSignIn } from '@/hooks';
 import { setLocale } from '@/i18n';
 import { SignInCancelled } from '@/services/authProvider';
@@ -10,7 +11,7 @@ import { spacing } from '@/theme';
 import type { AuthProvider } from '@/types';
 
 /**
- * SC-01: pick the language, then sign in with Google (both platforms) or Apple (iOS only). The
+ * SC-01: pick the language, then sign in with Google (both platforms) (Apple button hidden for now). The
  * language is stored on the phone straight away, so it survives a failed sign-in. On a new phone the
  * same Google account brings the data back through the snapshot (FR-X04); the gate then skips SC-02.
  */
@@ -35,21 +36,21 @@ export function SignIn() {
           <Text color="textMuted">{t('signIn.intro')}</Text>
         </View>
 
-        <View style={{ gap: spacing.sm }}>
-          <Text variant="bodyStrong">{t('signIn.language')}</Text>
-          <ChipRow>
-            <Chip
-              label={t('settings.vi')}
-              selected={current === 'vi'}
-              onPress={() => void setLocale('vi')}
-            />
-            <Chip
-              label={t('settings.en')}
-              selected={current === 'en'}
-              onPress={() => void setLocale('en')}
-            />
-          </ChipRow>
-        </View>
+        {ENABLED_LOCALES.length > 1 ? (
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="bodyStrong">{t('signIn.language')}</Text>
+            <ChipRow>
+              {ENABLED_LOCALES.map((l) => (
+                <Chip
+                  key={l}
+                  label={t(`settings.${l}`)}
+                  selected={current === l}
+                  onPress={() => void setLocale(l)}
+                />
+              ))}
+            </ChipRow>
+          </View>
+        ) : null}
 
         {failure && !cancelled ? (
           <InfoBanner
@@ -65,15 +66,6 @@ export function SignIn() {
             disabled={signIn.isPending}
             onPress={() => start('google')}
           />
-          {Platform.OS === 'ios' ? (
-            <Button
-              label={t('signIn.apple')}
-              variant="outline"
-              loading={signIn.isPending && signIn.variables?.provider === 'apple'}
-              disabled={signIn.isPending}
-              onPress={() => start('apple')}
-            />
-          ) : null}
         </View>
 
         <Text variant="caption" color="textMuted">
