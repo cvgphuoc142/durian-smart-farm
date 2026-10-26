@@ -1,4 +1,4 @@
-"""Household entity shapes (schema.json `EntityCreate` / `entities`).
+"""Household entity shapes.
 
 `*Create` models describe the writable fields. A patch is validated by merging it over the
 stored row and re-validating the whole thing through the same model, so every rule runs
@@ -7,10 +7,18 @@ derived from the create models so the two cannot drift.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, create_model, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    create_model,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from app.schemas.types import (
@@ -24,6 +32,7 @@ from app.schemas.types import (
     PaymentKind,
     QuantityPositive,
     SaleStatus,
+    Score,
     SeasonStage,
     Text,
     Vnd,
@@ -55,11 +64,21 @@ class SeasonCreate(_Strict):
     name: Text
     started_on: DateString
     stage: SeasonStage
+    # Free text the farmer types when stage == "other"; null for every other stage.
+    stage_other: OptText = None
     expected_harvest_on: DateString | None = None
     closed_on: DateString | None = None
     forecast_yield_kg: Kg | None = None
     forecast_price_vnd_kg: Vnd | None = None
     forecast_total_cost_vnd: Vnd | None = None
+
+    @model_validator(mode="after")
+    def _stage_other_pair(self) -> "SeasonCreate":
+        if (self.stage == "other") != (self.stage_other is not None):
+            raise PydanticCustomError(
+                "stage_other_pair", "stage_other is required for, and only for, stage 'other'"
+            )
+        return self
 
 
 class CareInputWrite(_Strict):
@@ -115,6 +134,61 @@ class SalePaymentCreate(_Strict):
     note: str | None = None
 
 
+class DiseaseCaseCreate(_Strict):
+    season_id: UUID
+    opened_at: datetime
+    closed_at: datetime | None = None
+    location_note: str | None = None
+    note: str | None = None
+
+
+class PredictionWrite(_Strict):
+    disease_code: str | None
+    score: Score
+
+
+class InferenceMetadata(BaseModel):
+    """Entries of the bundled manifest that produced the result; extra keys are kept."""
+
+    model_config = ConfigDict(extra="allow")
+
+    model_id: Text
+    model_version: Text
+    pipeline_version: Text
+    threshold_version: Text
+    inference_ms: StrictInt = Field(ge=0)
+
+
+class ScanCreate(_Strict):
+    season_id: UUID
+    case_id: UUID | None = None
+    photo_id: UUID
+    captured_at: datetime
+    plant_part: str
+    outcome: Literal["suspected", "healthy", "inconclusive"]
+    disease_code: str | None = None
+    score: Score | None = None
+    label_snapshot: str | None = None
+    label_locale: str | None = None
+    predictions: list[PredictionWrite]
+    inference_metadata: InferenceMetadata
+
+    @field_validator("plant_part")
+    @classmethod
+    def _plant_part(cls, value: str) -> str:
+        # The server cannot see the app's model manifest; it only checks for a code.
+        if not value.strip():
+            raise PydanticCustomError("unsupported_plant_part", "plant_part is empty")
+        return value
+
+    @field_validator("disease_code")
+    @classmethod
+    def _disease_code(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise PydanticCustomError("unknown_disease_code", "disease_code is empty")
+        return value
+
+
 # --- read shapes -----------------------------------------------------------------------
 
 
@@ -151,3 +225,5 @@ CareLogRow = _row("CareLog", CareLogCreate, inputs=(list[CareInputRow], ...))
 ExpenseRow = _row("Expense", ExpenseCreate)
 SaleRow = _row("Sale", SaleCreate)
 SalePaymentRow = _row("SalePayment", SalePaymentCreate)
+DiseaseCaseRow = _row("DiseaseCase", DiseaseCaseCreate)
+ScanRow = _row("Scan", ScanCreate)

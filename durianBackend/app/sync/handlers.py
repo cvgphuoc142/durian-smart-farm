@@ -55,7 +55,7 @@ def _reject_duplicate(ctx: TxContext, exc: DuplicateKeyError) -> None:
 async def apply_op(ctx: TxContext, op: Op) -> None:
     spec = SPECS.get(op.entity)
     if spec is None:
-        # disease_case / scan / self_check sync arrives with Phase 5.
+        # self_check sync is not implemented yet.
         ctx.reject(ErrorCode.validation_failed, "entity")
     if op.op == "delete":
         await _delete(ctx, spec, op)

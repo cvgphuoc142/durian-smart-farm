@@ -15,6 +15,7 @@ from uuid import UUID
 from app.db.codecs import to_decimal
 from app.domain import money
 from app.domain.errors import ErrorCode
+from app.schemas.entities import ScanCreate
 from app.sync.context import TxContext
 
 Row = dict[str, Any]
@@ -224,6 +225,37 @@ async def sale_payment_on_delete(ctx: TxContext, row: Row) -> None:
     _defer_refund_check(ctx, row["sale_id"])
 
 
+# --- disease case / scan -------------------------------------------------------------
+
+
+async def disease_case_validate(ctx: TxContext, id: UUID, m: Any, existing: Row | None) -> Row:
+    await _parent(ctx, "season", m.season_id, "season_id")
+    if m.closed_at is not None and m.closed_at < m.opened_at:
+        ctx.reject(ErrorCode.out_of_range, "data.closed_at")
+    return {}
+
+
+async def disease_case_on_delete(ctx: TxContext, row: Row) -> None:
+    _no_live_children(ctx, row, [("scan", "case_id"), ("care_log", "case_id")])
+
+
+async def scan_validate(ctx: TxContext, id: UUID, m: Any, existing: Row | None) -> Row:
+    if existing is not None:
+        # A saved scan is a snapshot: only case_id may change.
+        before = ScanCreate.model_validate({k: existing[k] for k in ScanCreate.model_fields})
+        keep = set(ScanCreate.model_fields) - {"case_id"}
+        if m.model_dump(mode="json", include=keep) != before.model_dump(mode="json", include=keep):
+            ctx.reject(ErrorCode.scan_immutable, "data")
+    await _parent(ctx, "season", m.season_id, "season_id")
+    if m.case_id is not None:
+        case = await _parent(ctx, "disease_case", m.case_id, "case_id")
+        if case["season_id"] != m.season_id:
+            ctx.reject(ErrorCode.season_mismatch, "data.case_id")
+    if await ctx.repos.raw_get_live("media_assets", m.photo_id) is None:
+        ctx.reject(ErrorCode.media_not_found, "data.photo_id")
+    return {}
+
+
 RULES: dict[str, EntityRules] = {
     "farm": EntityRules(farm_validate, farm_on_delete),
     "plot": EntityRules(plot_validate, plot_on_delete),
@@ -232,4 +264,6 @@ RULES: dict[str, EntityRules] = {
     "expense": EntityRules(expense_validate, _no_delete_rule),
     "sale": EntityRules(sale_validate, sale_on_delete),
     "sale_payment": EntityRules(sale_payment_validate, sale_payment_on_delete),
+    "disease_case": EntityRules(disease_case_validate, disease_case_on_delete),
+    "scan": EntityRules(scan_validate, _no_delete_rule),
 }

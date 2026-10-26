@@ -330,12 +330,14 @@ def test_in_order_parent_then_child_in_one_request(api: TestClient) -> None:
     assert [r["status"] for r in results] == ["applied", "applied"]
 
 
-def test_scan_entities_are_not_synced_until_phase_5(api: TestClient) -> None:
+def test_self_check_is_not_synced_yet(api: TestClient) -> None:
     f = Farmer(api)
     ids = setup_garden(f)
     r = f.one(
         upsert(
-            "disease_case", uid(), {"season_id": ids["season"], "opened_at": "2026-10-15T00:00:00Z"}
+            "self_check",
+            uid(),
+            {"season_id": ids["season"], "standard_version_id": uid(), "answers": []},
         )
     )
     rejected(r, "validation_failed", "ops.0.entity")

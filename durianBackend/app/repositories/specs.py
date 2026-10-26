@@ -71,7 +71,22 @@ SALE_PAYMENT = EntitySpec(
     scales={"amount_vnd": VND_SCALE},
     parents=("sale_id",),
 )
+DISEASE_CASE = EntitySpec(
+    "disease_case",
+    "disease_cases",
+    e.DiseaseCaseCreate,
+    e.DiseaseCaseRow,
+    parents=("season_id",),
+)
+SCAN = EntitySpec(
+    "scan",
+    "scans",
+    e.ScanCreate,
+    e.ScanRow,
+    parents=("season_id", "case_id", "photo_id"),
+)
 
 SPECS: dict[str, EntitySpec] = {
-    s.name: s for s in (FARM, PLOT, SEASON, CARE_LOG, EXPENSE, SALE, SALE_PAYMENT)
+    s.name: s
+    for s in (FARM, PLOT, SEASON, CARE_LOG, EXPENSE, SALE, SALE_PAYMENT, DISEASE_CASE, SCAN)
 }

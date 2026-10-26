@@ -3,8 +3,7 @@
 Household collections lead every index with `owner_id` (all queries are owner-scoped).
 Uniqueness among LIVE rows uses partial unique indexes; "live" is `deleted_at: null`
 (`$type: "null"`, since partial filters do not take an `$eq: null`). The index names are
-read by sync/handlers.py to turn a race-lost insert into the right error code. The media
-sha256 index arrives with Phase 5.
+read by sync/handlers.py to turn a race-lost insert into the right error code.
 """
 
 from pymongo import ASCENDING, DESCENDING, IndexModel
@@ -13,6 +12,14 @@ from pymongo.asynchronous.database import AsyncDatabase
 _LIVE = {"deleted_at": {"$type": "null"}}
 
 INDEXES: dict[str, list[IndexModel]] = {
+    "media_assets": [
+        IndexModel(
+            [("owner_id", ASCENDING), ("sha256", ASCENDING)],
+            name="media_sha256_live",
+            unique=True,
+            partialFilterExpression=_LIVE,
+        )
+    ],
     "farms": [IndexModel([("owner_id", ASCENDING)])],
     "plots": [
         IndexModel([("owner_id", ASCENDING), ("farm_id", ASCENDING)]),
@@ -78,6 +85,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "mutation_receipts": [
         IndexModel([("user_id", ASCENDING), ("mutation_id", ASCENDING)], unique=True)
     ],
+    "chat_rate_limits": [IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0)],
     "chat_reports": [
         IndexModel([("user_id", ASCENDING), ("idempotency_key", ASCENDING)], unique=True)
     ],

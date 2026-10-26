@@ -102,6 +102,15 @@ def test_plot_ranges() -> None:
     assert codes(e.PlotCreate, {**base, "tree_count": "5"})[0][1] == ErrorCode.invalid_format
 
 
+def test_stage_other_needs_free_text_and_only_then() -> None:
+    base = {"plot_id": U1, "name": "S1", "started_on": "2026-10-15"}
+    e.SeasonCreate(**base, stage="other", stage_other="Tỉa cành")
+    for bad in ({"stage": "other"}, {"stage": "harvest", "stage_other": "x"}):
+        assert [c for _, c in codes(e.SeasonCreate, {**base, **bad})] == [
+            ErrorCode.stage_other_pair
+        ]
+
+
 def test_care_input_amount_and_unit_travel_together() -> None:
     with pytest.raises(ValidationError) as ei:
         e.CareLogCreate(

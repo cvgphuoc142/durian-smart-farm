@@ -1,5 +1,4 @@
-"""Error code catalog. Generated from contract/api_contract.json `x-errorCodes`;
-tests/unit/test_error_catalog.py fails if the two drift."""
+"""Error code catalog: code -> (HTTP status, retryable)."""
 
 from enum import StrEnum
 
@@ -24,6 +23,7 @@ class ErrorCode(StrEnum):
     open_season_exists = "open_season_exists"
     care_input_required = "care_input_required"
     input_amount_unit_pair = "input_amount_unit_pair"
+    stage_other_pair = "stage_other_pair"
     season_mismatch = "season_mismatch"
     expense_link_taken = "expense_link_taken"
     expense_must_delete_with_care_log = "expense_must_delete_with_care_log"
@@ -71,6 +71,7 @@ ERROR_META: dict[ErrorCode, tuple[int, bool]] = {
     ErrorCode.open_season_exists: (422, False),
     ErrorCode.care_input_required: (422, False),
     ErrorCode.input_amount_unit_pair: (422, False),
+    ErrorCode.stage_other_pair: (422, False),
     ErrorCode.season_mismatch: (422, False),
     ErrorCode.expense_link_taken: (422, False),
     ErrorCode.expense_must_delete_with_care_log: (422, False),

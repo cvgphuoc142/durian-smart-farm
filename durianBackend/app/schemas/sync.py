@@ -1,4 +1,4 @@
-"""`/v1/sync` request and `/v1/snapshot` response shapes (schema.json Mutation*, Snapshot)."""
+"""`/v1/sync` request and `/v1/snapshot` response shapes."""
 
 from datetime import datetime
 from typing import Any, Literal, Self
@@ -8,11 +8,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.entities import (
     CareLogRow,
+    DiseaseCaseRow,
     ExpenseRow,
     FarmRow,
     PlotRow,
     SalePaymentRow,
     SaleRow,
+    ScanRow,
     SeasonRow,
 )
 
@@ -76,8 +78,8 @@ class Snapshot(BaseModel):
     expenses: list[ExpenseRow]  # type: ignore[valid-type]
     sales: list[SaleRow]  # type: ignore[valid-type]
     sale_payments: list[SalePaymentRow]  # type: ignore[valid-type]
-    # Scan entities arrive in Phase 5; the arrays are present but empty until then.
-    disease_cases: list[dict[str, Any]] = Field(default_factory=list)
-    media_assets: list[dict[str, Any]] = Field(default_factory=list)
-    scans: list[dict[str, Any]] = Field(default_factory=list)
+    disease_cases: list[DiseaseCaseRow]  # type: ignore[valid-type]
+    media_assets: list[dict[str, Any]]
+    scans: list[ScanRow]  # type: ignore[valid-type]
+    # Not implemented yet: present but empty.
     self_checks: list[dict[str, Any]] = Field(default_factory=list)

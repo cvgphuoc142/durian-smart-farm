@@ -1,6 +1,6 @@
-"""Wire scalar types from schema.json `$defs`. Money, kg and hectares are decimal STRINGS.
+"""Wire scalar types. Money, kg and hectares are decimal STRINGS.
 
-The contract's `VndPositive` etc. use a negative lookahead the pydantic regex engine does
+Positive-amount patterns can't use a negative lookahead the pydantic regex engine does
 not support, so the pattern checks the shape and an AfterValidator checks the sign (which
 also yields the catalog code `must_be_positive` instead of a generic format error).
 """
@@ -9,11 +9,14 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, StringConstraints
+from pydantic import AfterValidator, Field, StringConstraints
 from pydantic_core import PydanticCustomError
 
 Text = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 OptText = Text | None
+
+# Normalised 0-1 confidence.
+Score = Annotated[float, Field(ge=0, le=1)]
 
 Vnd = Annotated[str, StringConstraints(pattern=r"^[0-9]{1,16}(\.[0-9]{1,2})?$")]
 Kg = Annotated[str, StringConstraints(pattern=r"^[0-9]{1,9}(\.[0-9]{1,3})?$")]
@@ -46,7 +49,7 @@ DateString = Annotated[
 ]
 
 SeasonStage = Literal[
-    "recovery", "flower_induction", "flowering_fruit_set", "fruit_growth", "harvest"
+    "recovery", "flower_induction", "flowering_fruit_set", "fruit_growth", "harvest", "other"
 ]
 CareKind = Literal[
     "watering", "fertilizing", "spraying", "pruning", "inspection", "treatment", "other"

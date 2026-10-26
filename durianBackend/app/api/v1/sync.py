@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.api.deps import CurrentUser, current_user, get_database
+from app.media.wire import wire
 from app.repositories.household import Repos
 from app.schemas.sync import Snapshot, SyncRequest, SyncResponse
 from app.sync.engine import apply_mutations
@@ -115,4 +116,10 @@ async def snapshot(
         "expenses": await repos["expense"].all(),
         "sales": await repos["sale"].all(),
         "sale_payments": await repos["sale_payment"].all(),
+        "disease_cases": await repos["disease_case"].all(),
+        "scans": await repos["scan"].all(),
+        "media_assets": [
+            wire(d)
+            async for d in db["media_assets"].find({"owner_id": user.id}).sort("created_at", 1)
+        ],
     }
