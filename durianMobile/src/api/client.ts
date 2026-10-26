@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { API_URL, USE_MOCK } from '@/config';
+import { API_URL, DEFAULT_LOCALE, ENABLED_LOCALES, USE_MOCK } from '@/config';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -19,8 +19,9 @@ export const client = axios.create({
 client.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) config.headers.set('Authorization', `Bearer ${token}`);
-  const locale = useSettingsStore.getState().locale;
-  if (locale) config.headers.set('Accept-Language', locale);
+  const stored = useSettingsStore.getState().locale;
+  const locale = ENABLED_LOCALES.find((l) => l === stored) ?? DEFAULT_LOCALE;
+  config.headers.set('Accept-Language', locale);
   // One id per HTTP attempt, echoed in error bodies so a report can be matched to a server log.
   config.headers.set('X-Request-Id', newId());
   return config;

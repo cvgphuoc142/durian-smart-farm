@@ -17,7 +17,7 @@ import {
   ToggleRow,
   useToast,
 } from '@/components/ui';
-import { POLICY_URL, SUPPORT_URL } from '@/config';
+import { ENABLED_LOCALES } from '@/config';
 import {
   useAiConsent,
   useChangeLocale,
@@ -27,7 +27,6 @@ import {
   useRequireOnline,
 } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
-import { openExternal } from '@/services';
 import { spacing } from '@/theme';
 
 /**
@@ -72,35 +71,31 @@ export function Settings() {
     );
   });
 
-  const open = async (url: string) => {
-    if (!(await openExternal(url))) toast.show(t('settings.linkFailed'), 'error');
-  };
-
   return (
     <Screen
       header={<Header title={t('screens.Settings')} variant="back" onBack={() => nav.goBack()} />}
       contentStyle={{ gap: spacing.lg }}
     >
       <View testID="screen-Settings" style={{ gap: spacing.lg }}>
-        <Section title={t('settings.language')}>
-          <Card>
-            <ChipRow>
-              <Chip
-                label={t('settings.vi')}
-                selected={language === 'vi'}
-                onPress={() => void changeLocale('vi')}
-              />
-              <Chip
-                label={t('settings.en')}
-                selected={language === 'en'}
-                onPress={() => void changeLocale('en')}
-              />
-            </ChipRow>
-            <Text variant="secondary" color="textMuted" style={{ marginTop: spacing.sm }}>
-              {t('settings.languageHint')}
-            </Text>
-          </Card>
-        </Section>
+        {ENABLED_LOCALES.length > 1 ? (
+          <Section title={t('settings.language')}>
+            <Card>
+              <ChipRow>
+                {ENABLED_LOCALES.map((l) => (
+                  <Chip
+                    key={l}
+                    label={t(`settings.${l}`)}
+                    selected={language === l}
+                    onPress={() => void changeLocale(l)}
+                  />
+                ))}
+              </ChipRow>
+              <Text variant="secondary" color="textMuted" style={{ marginTop: spacing.sm }}>
+                {t('settings.languageHint')}
+              </Text>
+            </Card>
+          </Section>
+        ) : null}
 
         <Section title={t('settings.ai')}>
           <Card>
@@ -148,8 +143,6 @@ export function Settings() {
 
         <Section title={t('settings.about')}>
           <ListGroup>
-            <ListRow title={t('settings.policy')} onPress={() => void open(POLICY_URL)} />
-            <ListRow title={t('settings.support')} onPress={() => void open(SUPPORT_URL)} />
             <ListRow
               title={t('settings.version')}
               trailing={<Text color="textMuted">{Constants.expoConfig?.version ?? '—'}</Text>}

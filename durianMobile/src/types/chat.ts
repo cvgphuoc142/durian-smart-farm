@@ -4,8 +4,6 @@ export interface Citation {
   article_id: string;
   version_id: string;
   version_no: number;
-  translation_revision: number;
-  source_locale: Locale;
   title: string;
 }
 

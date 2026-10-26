@@ -1,5 +1,4 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
-import { Linking } from 'react-native';
 
 import { db } from '@/api';
 import { resetDbHandle, scanRepo } from '@/db';
@@ -12,10 +11,22 @@ import { renderWithProviders, resetApp, TEST_USER } from '@/test/utils';
 let mockOnline = true;
 jest.mock('@/hooks/useIsOnline', () => ({ useIsOnline: () => mockOnline }));
 
+// English is switched off in the app config. The switch itself is kept working, so these tests
+// turn it back on to prove that bringing English back is a config change only.
+let mockLocales: ('vi' | 'en')[] = ['vi', 'en'];
+jest.mock('@/config', () => {
+  const config = { ...jest.requireActual('@/config') };
+  Object.defineProperty(config, 'ENABLED_LOCALES', {
+    get: () => mockLocales ?? ['vi', 'en'],
+  });
+  return config;
+});
+
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, opts);
 
 beforeEach(async () => {
   mockOnline = true;
+  mockLocales = ['vi', 'en'];
   resetDbHandle();
   useSettingsStore.setState({ locale: null });
   await act(async () => {
@@ -45,6 +56,16 @@ async function openMore(row?: string) {
 }
 
 describe('SC-01: language and sign-in', () => {
+  it('shows no language choice while English is disabled; the app is Vietnamese', async () => {
+    mockLocales = ['vi'];
+    resetApp({ signedIn: false });
+    renderWithProviders(<RootNavigator />);
+    await screen.findByTestId('screen-SignIn');
+    expect(screen.queryAllByText(t('signIn.language')).length).toBe(0);
+    expect(screen.queryAllByText(t('settings.en'))).toHaveLength(0);
+    expect(i18n.language).toBe('vi');
+  });
+
   it('picking English switches the text at once and keeps the choice', async () => {
     resetApp({ signedIn: false });
     renderWithProviders(<RootNavigator />);
@@ -134,13 +155,6 @@ describe('SC-25: settings (AC-21, AC-22)', () => {
     expect(db.preferences.ai_consent_version).toBeNull();
   });
 
-  it('opens the policy link', async () => {
-    await start();
-    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
-    await openMore(t('more.settings'));
-    press(t('settings.policy'));
-    await waitFor(() => expect(open).toHaveBeenCalled());
-  });
 });
 
 describe('SC-27: account (AC-17, AC-18)', () => {
@@ -162,43 +176,5 @@ describe('SC-27: account (AC-17, AC-18)', () => {
     await shown(t('dialogs.signOut.unsynced', { count: 2 }));
     press(t('dialogs.signOut.syncFirst'));
     expect(useAuthStore.getState().token).not.toBeNull();
-  });
-
-  it('deletes the account on the server and everything on the phone', async () => {
-    await start();
-    useDraftStore.getState().saveDraft('expense', { note: 'x' });
-    expect(db.tables.farm.size).toBe(1);
-    await openMore(t('more.account'));
-    press(t('account.delete'));
-    await shown(t('account.deleteTitle'));
-    press(t('account.deleteConfirm'));
-
-    await screen.findByTestId('screen-SignIn');
-    expect(db.tables.farm.size).toBe(0);
-    expect(useAuthStore.getState().token).toBeNull();
-    expect(useContextStore.getState().byUser['mock-user']).toBeUndefined();
-    expect(useDraftStore.getState().drafts['mock-user']).toBeUndefined();
-  });
-
-  it('a failed deletion removes nothing from the phone', async () => {
-    await start();
-    await openMore(t('more.account'));
-    press(t('account.delete'));
-    db.sim.failWith.push({ status: 503, code: 'unavailable' });
-    press(t('account.deleteConfirm'));
-
-    await shown(t('account.deleteFailed'));
-    expect(useAuthStore.getState().token).not.toBeNull();
-    expect(useContextStore.getState().byUser['mock-user']?.farmId).toBe('f1');
-    expect(db.tables.farm.size).toBe(1);
-  });
-
-  it('offline it will not start a deletion', async () => {
-    await start();
-    mockOnline = false;
-    await openMore(t('more.account'));
-    press(t('account.delete'));
-    await shown(t('errors.needsNetwork'));
-    expect(screen.queryAllByText(t('account.deleteTitle'))).toHaveLength(0);
   });
 });

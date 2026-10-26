@@ -13,7 +13,8 @@ import {
   Text,
   TextInput,
 } from '@/components/ui';
-import { useContacts, useContentMeta, useProvinces } from '@/hooks';
+import { refreshContent } from '@/content';
+import { useContacts, useContentMeta, useIsOnline, useProvinces } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
 import type { ContactKind } from '@/types';
@@ -28,11 +29,17 @@ export function Directory() {
   const { t } = useTranslation();
   const nav = useAppNavigation();
   const meta = useContentMeta();
+  const online = useIsOnline();
   const provinces = useProvinces();
   const [kind, setKind] = useState<ContactKind | null>(null);
   const [province, setProvince] = useState<string | null>(null);
   const [typed, setTyped] = useState('');
   const [text, setText] = useState('');
+
+  // Newly published stores and experts only arrive with a release, so look for one on open.
+  useEffect(() => {
+    if (online) void refreshContent();
+  }, [online]);
 
   useEffect(() => {
     const id = setTimeout(() => setText(typed), TYPING_MS);

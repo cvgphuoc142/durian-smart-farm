@@ -3,26 +3,13 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { Icon, Text } from '@/components/ui';
 import { colors, radius, spacing } from '@/theme';
-import type { Citation, Locale } from '@/types';
-
-import { useLanguageName } from './ArticleCard';
+import type { Citation } from '@/types';
 
 /**
- * A source of a chatbot answer. It opens the exact version and translation revision that was
- * cited. When the source is in another language than the answer, the chip names it.
+ * A source of a chatbot answer. It opens the exact article version that was cited.
  */
-export function CitationChip({
-  citation,
-  answerLocale,
-  onPress,
-}: {
-  citation: Citation;
-  answerLocale: Locale;
-  onPress: () => void;
-}) {
+export function CitationChip({ citation, onPress }: { citation: Citation; onPress: () => void }) {
   const { t } = useTranslation();
-  const lang = useLanguageName();
-  const other = citation.source_locale !== answerLocale;
   return (
     <Pressable
       accessibilityRole="link"
@@ -32,9 +19,7 @@ export function CitationChip({
     >
       <Icon name="file" size={16} color="primary" />
       <Text variant="label" color="primary" numberOfLines={2} style={styles.text}>
-        {`${citation.title} · v${citation.version_no}${
-          other ? ` · ${t('chat.sourceLanguage', { lang: lang(citation.source_locale) })}` : ''
-        }`}
+        {`${citation.title} · v${citation.version_no}`}
       </Text>
     </Pressable>
   );

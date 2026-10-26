@@ -75,17 +75,6 @@ describe('SC-17, SC-18: knowledge and article (AC-07, AC-23)', () => {
     expect(screen.getAllByText(/Triệu chứng/).length).toBeGreaterThan(0);
   });
 
-  it('an English phone shows the original of an untranslated article and says so', async () => {
-    await start();
-    await act(async () => {
-      await i18n.changeLanguage('en');
-    });
-    await openLookup();
-    press('Thối trái (mẫu)');
-    await screen.findByTestId('screen-Article');
-    await shown(t('article.fallback', { lang: 'Tiếng Việt' }));
-  });
-
   it('without a downloaded pack it says so, and offers the download only when online', async () => {
     await start({ pack: false });
     mockOnline = false;
@@ -143,23 +132,16 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     await shown('Bệnh xì mủ (mẫu)');
   });
 
-  it('answers in the language asked and names a source in another language', async () => {
+  it('answers from the approved articles and cites the version it read', async () => {
     await start();
     db.preferences = { ...db.preferences, ai_consent_version: 1 };
-    await act(async () => {
-      await i18n.changeLanguage('en');
-    });
     await openChat();
-    fireEvent.changeText(label(t('chat.input')), 'canker');
+    fireEvent.changeText(label(t('chat.input')), 'xì mủ');
     press(t('chat.send'));
-    // The English article is cited in English; the untranslated one would say "Tiếng Việt source".
-    await screen.findByLabelText(t('chat.openSource', { title: 'Phytophthora canker (sample)' }));
+    await screen.findByLabelText(t('chat.openSource', { title: 'Bệnh xì mủ (mẫu)' }));
     fireEvent.changeText(label(t('chat.input')), 'thối trái');
     press(t('chat.send'));
     await screen.findByLabelText(t('chat.openSource', { title: 'Thối trái (mẫu)' }));
-    expect(
-      screen.getAllByText(new RegExp(t('chat.sourceLanguage', { lang: 'Tiếng Việt' }))).length,
-    ).toBeGreaterThan(0);
   });
 
   it('says plainly when there are not enough sources', async () => {
@@ -189,7 +171,8 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     await openChat();
     await shown(t('chat.offline'));
     fireEvent.changeText(label(t('chat.input')), 'xi mu');
-    expect(getDraft('chat')).toEqual({ question: 'xi mu' });
+    // The draft is saved shortly after typing stops, so typing itself stays fast.
+    await waitFor(() => expect(getDraft('chat')).toEqual({ question: 'xi mu' }));
     expect(screen.queryAllByText(t('chat.send'))).toHaveLength(0);
     press(t('chat.search'));
     await shown('Bệnh xì mủ (mẫu)');
@@ -200,7 +183,7 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
       fireEvent.changeText(label(t('chat.input')), 'xi mu');
     });
     expect(ask).not.toHaveBeenCalled();
-    expect(getDraft('chat')).toEqual({ question: 'xi mu' });
+    await waitFor(() => expect(getDraft('chat')).toEqual({ question: 'xi mu' }));
   });
 
   it('a failed send keeps the question and is only sent again by hand (429)', async () => {
@@ -272,21 +255,6 @@ describe('SC-21: standards and checklist (AC-16, AC-23)', () => {
     const [check] = db.tables.self_check.values();
     expect(check).toMatchObject({ season_id: 's1', standard_version_id: 'std-cn-v1' });
     expect(check.answers.filter((a) => a.checked)).toHaveLength(1);
-  });
-
-  it('the tick survives a change of language', async () => {
-    await start();
-    await openStandards();
-    await tick('Mã vùng trồng (mẫu)');
-    await shown(t('standards.progress', { done: 1, total: 3 }));
-    await act(async () => {
-      await i18n.changeLanguage('en');
-    });
-    await shown(t('standards.progress', { done: 1, total: 3 }));
-    expect(
-      label(t('standards.tick', { title: 'Growing area code (sample)' })).props.accessibilityState
-        .checked,
-    ).toBe(true);
   });
 
   it('a market with nothing approved shows an empty state, not made-up items', async () => {
@@ -376,6 +344,7 @@ describe('SC-23, SC-24: directory (AC-07, AC-15)', () => {
   });
 
   it('with no pack the directory is empty and explains why', async () => {
+    mockOnline = false; // online, opening the directory would download the pack
     await start({ pack: false });
     await openDirectory();
     await shown(t('directory.emptyTitle'));

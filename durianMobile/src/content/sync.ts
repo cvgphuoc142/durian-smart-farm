@@ -39,8 +39,8 @@ export function validateRelease(manifest: ContentManifest, release: ContentRelea
     Array.isArray(release.standard_profiles) &&
     Array.isArray(release.standard_versions) &&
     Array.isArray(release.contacts) &&
-    release.articles.every((a) => a.id && a.version_id && a.locale && a.title != null) &&
-    release.standard_versions.every((v) => v.id && v.locale && Array.isArray(v.items));
+    release.articles.every((a) => a.id && a.version_id && a.title != null) &&
+    release.standard_versions.every((v) => v.id && Array.isArray(v.items));
   if (!ok) throw new Error('invalid_release');
 }
 

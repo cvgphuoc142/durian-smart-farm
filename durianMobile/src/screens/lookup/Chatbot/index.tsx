@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ArticleCard, CitationChip } from '@/components/domain';
 import {
@@ -35,6 +35,9 @@ const DRAFT_KEY = 'chat';
 /** A farm snapshot older than this is called out as possibly out of date (FR-C06). */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+/** Typing must not wait on a persisted-store write: a slow keystroke breaks Vietnamese Telex/VNI. */
+const DRAFT_SAVE_DELAY_MS = 500;
+
 const saveDraft = (question: string) => {
   const store = useDraftStore.getState();
   if (question.trim()) store.saveDraft(DRAFT_KEY, { question });
@@ -67,9 +70,41 @@ export function Chatbot() {
   const canAsk = ask.online && consent.consented;
   const results = useArticleList({ text: searched });
 
+  const scroller = useRef<ScrollView>(null);
+  const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const latest = useRef(question);
+  latest.current = question;
+
+  // Show the newest message: the question just sent, then its answer or the failure card.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
+    return () => cancelAnimationFrame(id);
+  }, [messages.length, pending, failed]);
+
   const change = (text: string) => {
     setQuestion(text);
-    saveDraft(text);
+    latest.current = text;
+    clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(() => saveDraft(latest.current), DRAFT_SAVE_DELAY_MS);
+  };
+
+  // Leaving the screen saves what is typed right away.
+  useEffect(
+    () => () => {
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current);
+        saveDraft(latest.current);
+      }
+    },
+    [],
+  );
+
+  /** A question that did not get an answer goes back in the box, unless the farmer typed anew. */
+  const restore = (q: string) => {
+    if (latest.current.trim()) return;
+    setQuestion(q);
+    latest.current = q;
+    saveDraft(q);
   };
 
   const send = async (text: string) => {
@@ -77,13 +112,17 @@ export function Chatbot() {
     if (!q || ask.isPending) return;
     setFailed(null);
     setPending(q);
+    // The box empties as soon as the question is sent; a failed send puts it back (see catch).
+    clearTimeout(draftTimer.current);
+    draftTimer.current = undefined;
+    setQuestion('');
+    latest.current = '';
+    saveDraft('');
     try {
       const reply = await ask.send(q);
-      if (reply) {
-        setQuestion('');
-        saveDraft('');
-      }
+      if (!reply) restore(q);
     } catch (e) {
+      restore(q);
       // Kept as a draft; the farmer sends it again by hand. A refused consent is re-read first.
       if ((e as { code?: string }).code === 'ai_consent_required') void ask.me.refetch();
       setFailed({ question: q, message: errorText(e) });
@@ -108,6 +147,7 @@ export function Chatbot() {
 
   return (
     <Screen
+      scrollRef={scroller}
       header={<Header title={t('screens.Chatbot')} variant="back" onBack={() => nav.goBack()} />}
       footer={
         <View style={{ gap: spacing.sm }}>
@@ -197,15 +237,12 @@ export function Chatbot() {
                     </Text>
                     {m.response.citations.map((c) => (
                       <CitationChip
-                        key={`${c.article_id}-${c.version_id}-${c.translation_revision}`}
+                        key={`${c.article_id}-${c.version_id}`}
                         citation={c}
-                        answerLocale={m.response!.answer_locale}
                         onPress={() =>
                           nav.navigate('Article', {
                             articleId: c.article_id,
                             versionId: c.version_id,
-                            translationRevision: c.translation_revision,
-                            locale: c.source_locale,
                           })
                         }
                       />
@@ -225,16 +262,14 @@ export function Chatbot() {
                   />
                 ) : null}
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('chat.report')}
+              <Button
+                size="md"
+                variant="outline"
+                icon="alert"
+                label={t('chat.report')}
                 onPress={() => nav.navigate('ReportAnswer', { messageId: m.id })}
                 style={styles.report}
-              >
-                <Text variant="label" color="textMuted">
-                  {t('chat.report')}
-                </Text>
-              </Pressable>
+              />
             </View>
           ),
         )}
@@ -308,5 +343,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  report: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  report: { alignSelf: 'flex-start' },
 });

@@ -3,9 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { onContentChange, refreshContent, useContentStatus } from '@/content';
 import { contentRepo } from '@/db';
 import type { ArticleQuery, ContactQuery, ContentMeta } from '@/db/contentRepo';
-import type { Article, Contact, Disease, Locale, StandardProfile, StandardVersion } from '@/types';
-
-import { useFormat } from './useFormat';
+import type { Article, Contact, Disease, StandardProfile, StandardVersion } from '@/types';
 
 /**
  * Reads the content pack on the phone and re-reads it when a new release is installed. Works
@@ -53,12 +51,11 @@ export function useContentRefresh() {
   return { ...status, refresh: () => refreshContent() };
 }
 
-export function useArticleList(query: Omit<ArticleQuery, 'locale'>) {
-  const { locale } = useFormat();
+export function useArticleList(query: ArticleQuery) {
   const { text, category, part, stage, diseaseCode } = query;
   return useContent(
-    () => contentRepo.listArticles({ locale, text, category, part, stage, diseaseCode }),
-    [locale, text, category, part, stage, diseaseCode],
+    () => contentRepo.listArticles({ text, category, part, stage, diseaseCode }),
+    [text, category, part, stage, diseaseCode],
     NO_ARTICLES,
   );
 }
@@ -71,28 +68,18 @@ export function useDiseases() {
   return useContent(() => contentRepo.listDiseases(), [], NO_DISEASES).data;
 }
 
-/** The article, or exactly the cited version and translation revision. `null` = not on the phone. */
-export function useArticle(
-  articleId: string,
-  exact?: { versionId: string; translationRevision?: number; locale?: Locale },
-) {
-  const { locale } = useFormat();
+/** The article, or exactly the cited version. `null` = not on the phone. */
+export function useArticle(articleId: string, exact?: { versionId: string }) {
   const versionId = exact?.versionId;
-  const revision = exact?.translationRevision;
-  const citedLocale = exact?.locale;
   return useContent<{ article: Article | null; current: boolean }>(
     async () => {
-      const article = await contentRepo.getArticle(
-        articleId,
-        locale,
-        versionId ? { versionId, translationRevision: revision, locale: citedLocale } : undefined,
-      );
+      const article = await contentRepo.getArticle(articleId, versionId ? { versionId } : undefined);
       const current = article
         ? await contentRepo.isCurrentVersion(articleId, article.version_id)
         : true;
       return { article, current };
     },
-    [articleId, locale, versionId, revision, citedLocale],
+    [articleId, versionId],
     { article: null, current: true },
   );
 }
@@ -102,13 +89,12 @@ export function useArticle(
  * and the result screen then says "no related article". No product or shop is ever suggested.
  */
 export function useRelatedArticles(diseaseCode: string | null, plantPart: string): Article[] {
-  const { locale } = useFormat();
   return useContent(
     () =>
       diseaseCode
-        ? contentRepo.relatedArticles(diseaseCode, plantPart, locale)
+        ? contentRepo.relatedArticles(diseaseCode, plantPart)
         : Promise.resolve(NO_ARTICLES),
-    [diseaseCode, plantPart, locale],
+    [diseaseCode, plantPart],
     NO_ARTICLES,
   ).data;
 }
@@ -122,7 +108,6 @@ export interface StandardEntry {
 }
 
 export function useStandards() {
-  const { locale } = useFormat();
   return useContent<StandardEntry[]>(
     async () => {
       const profiles = await contentRepo.listProfiles();
@@ -130,22 +115,21 @@ export function useStandards() {
         profiles.map(async (profile) => ({
           profile,
           version: profile.published_version_id
-            ? await contentRepo.getStandardVersion(profile.published_version_id, locale)
+            ? await contentRepo.getStandardVersion(profile.published_version_id)
             : null,
           versions: await contentRepo.listStandardVersionRefs(profile.id),
         })),
       );
     },
-    [locale],
+    [],
     [],
   );
 }
 
 export function useStandardVersion(id: string | null) {
-  const { locale } = useFormat();
   return useContent<StandardVersion | null>(
-    () => (id ? contentRepo.getStandardVersion(id, locale) : Promise.resolve(null)),
-    [id, locale],
+    () => (id ? contentRepo.getStandardVersion(id) : Promise.resolve(null)),
+    [id],
     null,
   );
 }

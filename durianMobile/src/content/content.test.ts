@@ -25,42 +25,31 @@ describe('content release', () => {
     expect(await refreshContent()).toBe('updated');
     const meta = await contentRepo.getMeta();
     expect(meta?.release_no).toBe(1);
-    expect((await contentRepo.listArticles({ locale: 'vi' })).length).toBe(3);
+    expect((await contentRepo.listArticles({})).length).toBe(3);
     // Same release again: nothing to download.
     expect(await refreshContent()).toBe('up_to_date');
   });
 
-  it('finds text with and without diacritics, in both languages (FR-C01, AC-24)', async () => {
+  it('finds text with and without diacritics (FR-C01, AC-24)', async () => {
     await refreshContent();
     for (const q of ['xì mủ', 'xi mu', 'XI MU', 'phytophthora', 'thoi trai', 'đốm']) {
-      const found = await contentRepo.listArticles({ locale: 'vi', text: q });
+      const found = await contentRepo.listArticles({ text: q });
       if (q === 'đốm') expect(found).toEqual([]);
       else expect(found.length).toBeGreaterThan(0);
     }
-    // A disease name in English finds the article, which is then shown in Vietnamese.
-    const en = await contentRepo.listArticles({ locale: 'vi', text: 'canker' });
+    // A disease name in English finds the article.
+    const en = await contentRepo.listArticles({ text: 'canker' });
     expect(titles(en)).toEqual(['Bệnh xì mủ (mẫu)']);
     // Prefix match and all words must match.
-    expect((await contentRepo.listArticles({ locale: 'vi', text: 'thoi tra' })).length).toBe(1);
-    expect(await contentRepo.listArticles({ locale: 'vi', text: 'thoi canker' })).toEqual([]);
-  });
-
-  it('shows the source text of the same version when a translation is missing (AC-23)', async () => {
-    await refreshContent();
-    const list = await contentRepo.listArticles({ locale: 'en' });
-    const rot = list.find((a) => a.id === 'art-rot')!;
-    expect(rot.is_fallback).toBe(true);
-    expect(rot.locale).toBe('vi');
-    const fert = list.find((a) => a.id === 'art-fert')!;
-    expect(fert.is_fallback).toBe(false);
-    expect(fert.title).toBe('Fertilising while fruit grows (sample)');
+    expect((await contentRepo.listArticles({ text: 'thoi tra' })).length).toBe(1);
+    expect(await contentRepo.listArticles({ text: 'thoi canker' })).toEqual([]);
   });
 
   it('filters by category, body part and stage', async () => {
     await refreshContent();
-    expect((await contentRepo.listArticles({ locale: 'vi', category: 'care' })).length).toBe(1);
-    expect((await contentRepo.listArticles({ locale: 'vi', part: 'fruit' })).length).toBe(2);
-    expect((await contentRepo.listArticles({ locale: 'vi', stage: 'fruit_growth' })).length).toBe(
+    expect((await contentRepo.listArticles({ category: 'care' })).length).toBe(1);
+    expect((await contentRepo.listArticles({ part: 'fruit' })).length).toBe(2);
+    expect((await contentRepo.listArticles({ stage: 'fruit_growth' })).length).toBe(
       1,
     );
     expect(await contentRepo.articleFacets()).toEqual({
@@ -72,11 +61,11 @@ describe('content release', () => {
 
   it('finds related articles by disease and body part (FR-B05)', async () => {
     await refreshContent();
-    expect(titles(await contentRepo.relatedArticles('phytophthora', 'leaf', 'vi'))).toEqual([
+    expect(titles(await contentRepo.relatedArticles('phytophthora', 'leaf'))).toEqual([
       'Bệnh xì mủ (mẫu)',
     ]);
-    expect(await contentRepo.relatedArticles('phytophthora', 'root', 'vi')).toEqual([]);
-    expect(await contentRepo.relatedArticles('unknown_code', 'leaf', 'vi')).toEqual([]);
+    expect(await contentRepo.relatedArticles('phytophthora', 'root')).toEqual([]);
+    expect(await contentRepo.relatedArticles('unknown_code', 'leaf')).toEqual([]);
   });
 
   it('a failed download keeps the previous release (AC-25)', async () => {
@@ -86,13 +75,13 @@ describe('content release', () => {
     expect(await refreshContent()).toBe('failed');
     expect(useContentStatus.getState().state).toBe('failed');
     expect((await contentRepo.getMeta())?.release_no).toBe(1);
-    expect((await contentRepo.listArticles({ locale: 'vi' })).length).toBe(3);
+    expect((await contentRepo.listArticles({})).length).toBe(3);
 
     // Back online: the same call installs it. Nothing retried by itself in between.
     db.sim.failRelease = false;
     expect(await refreshContent()).toBe('updated');
     expect((await contentRepo.getMeta())?.release_no).toBe(2);
-    expect((await contentRepo.listArticles({ locale: 'vi' })).length).toBe(4);
+    expect((await contentRepo.listArticles({})).length).toBe(4);
   });
 
   it('a release that breaks half way rolls back completely', async () => {
@@ -102,7 +91,7 @@ describe('content release', () => {
     (broken.contacts[1] as { kind: unknown }).kind = null;
     await expect(contentRepo.installRelease(broken, new Date().toISOString())).rejects.toThrow();
     expect((await contentRepo.getMeta())?.release_no).toBe(1);
-    expect((await contentRepo.listArticles({ locale: 'vi' })).length).toBe(3);
+    expect((await contentRepo.listArticles({})).length).toBe(3);
     expect((await contentRepo.listContacts()).length).toBe(3);
   });
 
@@ -124,47 +113,33 @@ describe('content release', () => {
     expect(await contentRepo.getMeta()).toBeNull();
   });
 
-  it('a translation revision changes only the text; a cited revision still opens its old text (AC-25)', async () => {
+  it('a cited version still opens its old text after a newer one is published (AC-25)', async () => {
     await refreshContent();
     const cited = {
       article_id: 'art-phyto',
       version_id: 'art-phyto-v1',
       version_no: 1,
-      translation_revision: 1,
-      source_locale: 'en' as const,
-      title: 'Phytophthora canker (sample)',
+      title: 'Bệnh xì mủ (mẫu)',
     };
     await contentRepo.pinCitations([cited]);
 
     db.contentRelease = 2;
     await refreshContent();
 
-    const now = await contentRepo.getArticle('art-phyto', 'en');
-    expect(now?.translation_revision).toBe(2);
-    expect(now?.body).toContain('revised');
-    // Same article, same version id, same item ids: only the revision moved.
-    expect(now?.version_id).toBe('art-phyto-v1');
+    const now = await contentRepo.getArticle('art-phyto');
+    expect(now?.version_no).toBe(2);
+    expect(now?.body).toContain('bản sửa');
 
-    const old = await contentRepo.getArticle('art-phyto', 'en', {
-      versionId: 'art-phyto-v1',
-      translationRevision: 1,
-      locale: 'en',
-    });
-    expect(old?.translation_revision).toBe(1);
-    expect(old?.is_fallback).toBe(false);
-    expect(old?.body).not.toContain('revised');
+    const old = await contentRepo.getArticle('art-phyto', { versionId: 'art-phyto-v1' });
+    expect(old?.version_no).toBe(1);
+    expect(old?.body).not.toContain('bản sửa');
   });
 
-  it('an uncited old revision is gone and is not replaced by the new text', async () => {
+  it('an uncited old version is gone and is not replaced by the new text', async () => {
     await refreshContent();
     db.contentRelease = 2;
     await refreshContent();
-    const old = await contentRepo.getArticle('art-phyto', 'en', {
-      versionId: 'art-phyto-v1',
-      translationRevision: 1,
-      locale: 'en',
-    });
-    expect(old).toBeNull();
+    expect(await contentRepo.getArticle('art-phyto', { versionId: 'art-phyto-v1' })).toBeNull();
   });
 });
 
@@ -176,12 +151,9 @@ describe('standards', () => {
       ['CN', 'std-cn-v1'],
       ['EU', null],
     ]);
-    const v1 = await contentRepo.getStandardVersion('std-cn-v1', 'vi');
+    const v1 = await contentRepo.getStandardVersion('std-cn-v1');
     expect(v1?.items).toHaveLength(3);
-    // Item ids are the same in every language, so a tick does not depend on the UI language.
-    const en = await contentRepo.getStandardVersion('std-cn-v1', 'en');
-    expect(en?.items.map((i) => i.id)).toEqual(v1?.items.map((i) => i.id));
-    expect(en?.is_fallback).toBe(false);
+    expect(v1?.title).toContain('Tiêu chuẩn CN');
 
     await contentRepo.pinStandardVersion('std-cn-v1');
     db.contentRelease = 2;
@@ -189,10 +161,10 @@ describe('standards', () => {
 
     const now = await contentRepo.listProfiles();
     expect(now[0].published_version_id).toBe('std-cn-v2');
-    const v2 = await contentRepo.getStandardVersion('std-cn-v2', 'vi');
+    const v2 = await contentRepo.getStandardVersion('std-cn-v2');
     expect(v2?.items).toHaveLength(4);
     // v1 is still readable, and v2 shares none of its item ids (a new version starts unticked).
-    const kept = await contentRepo.getStandardVersion('std-cn-v1', 'vi');
+    const kept = await contentRepo.getStandardVersion('std-cn-v1');
     expect(kept?.items).toHaveLength(3);
     expect(v2!.items.some((i) => kept!.items.some((k) => k.id === i.id))).toBe(false);
     expect(
@@ -204,7 +176,7 @@ describe('standards', () => {
     await refreshContent();
     db.contentRelease = 2;
     await refreshContent();
-    expect(await contentRepo.getStandardVersion('std-cn-v1', 'vi')).toBeNull();
+    expect(await contentRepo.getStandardVersion('std-cn-v1')).toBeNull();
   });
 });
 

@@ -120,4 +120,39 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (kind, key)
   );
   `,
+  // Articles, standards and contacts are one text, not one per language. The pack is public and
+  // re-downloadable, so the tables are rebuilt and `content_meta` cleared to force a fresh release.
+  `
+  DROP TABLE content_article_fts;
+  DROP TABLE content_article;
+  DROP TABLE content_standard_version;
+  DELETE FROM content_meta;
+  DELETE FROM content_pin;
+
+  CREATE TABLE content_article (
+    rid INTEGER PRIMARY KEY AUTOINCREMENT,
+    article_id TEXT NOT NULL,
+    version_id TEXT NOT NULL,
+    version_no INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    category TEXT,
+    disease_code TEXT,
+    plant_parts TEXT NOT NULL,
+    stages TEXT NOT NULL,
+    source_links TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    UNIQUE (article_id, version_id)
+  );
+  CREATE INDEX content_article_id ON content_article (article_id);
+  -- Text folded to lower case without diacritics; rowid = content_article.rid.
+  CREATE VIRTUAL TABLE content_article_fts USING fts5(text);
+
+  CREATE TABLE content_standard_version (
+    id TEXT PRIMARY KEY NOT NULL,
+    profile_id TEXT NOT NULL,
+    version_no INTEGER NOT NULL,
+    json TEXT NOT NULL
+  );
+  `,
 ];

@@ -2,7 +2,7 @@ import { StackActions, useRoute, type RouteProp } from '@react-navigation/native
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
-import { useCategoryName, useLanguageName } from '@/components/domain';
+import { useCategoryName } from '@/components/domain';
 import {
   Badge,
   Button,
@@ -33,15 +33,10 @@ export function Article() {
   const nav = useAppNavigation();
   const toast = useToast();
   const online = useIsOnline();
-  const lang = useLanguageName();
   const category = useCategoryName();
   const refresh = useContentRefresh();
-  const { articleId, versionId, translationRevision, locale } =
-    useRoute<RouteProp<RootStackParamList, 'Article'>>().params;
-  const { data, ready } = useArticle(
-    articleId,
-    versionId ? { versionId, translationRevision, locale } : undefined,
-  );
+  const { articleId, versionId } = useRoute<RouteProp<RootStackParamList, 'Article'>>().params;
+  const { data, ready } = useArticle(articleId, versionId ? { versionId } : undefined);
   const diseases = useDiseases();
 
   const header = <Header title={t('screens.Article')} variant="back" onBack={() => nav.goBack()} />;
@@ -92,7 +87,6 @@ export function Article() {
             {article.title}
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-            <Badge label={lang(article.locale)} tone="info" icon="globe" />
             <Badge
               label={t('article.version', {
                 no: article.version_no,
@@ -107,13 +101,6 @@ export function Article() {
           </View>
         </View>
 
-        {article.is_fallback ? (
-          <InfoBanner
-            tone="warning"
-            icon="globe"
-            text={t('article.fallback', { lang: lang(article.source_locale) })}
-          />
-        ) : null}
         {!current ? (
           <InfoBanner
             tone="warning"

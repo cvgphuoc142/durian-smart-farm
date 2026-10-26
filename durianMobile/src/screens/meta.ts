@@ -183,7 +183,7 @@ export const SCREENS: Record<ScreenName, ScreenMeta> = {
     links: [
       {
         to: 'Article',
-        params: { articleId: 'demo', versionId: 'v1', translationRevision: 1, locale: 'vi' },
+        params: { articleId: 'demo', versionId: 'v1' },
       },
       { to: 'ReportAnswer', params: { messageId: 'demo' } },
       { to: 'Settings' },

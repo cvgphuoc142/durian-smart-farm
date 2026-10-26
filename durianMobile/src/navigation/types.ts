@@ -1,6 +1,6 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
-import type { Locale, PaymentKind } from '@/types';
+import type { PaymentKind } from '@/types';
 
 /**
  * The five tabs (brief §3). `ScanTab` has no screen of its own: the raised centre button opens
@@ -45,9 +45,6 @@ export type RootStackParamList = {
   Article: {
     articleId: string;
     versionId?: string;
-    translationRevision?: number;
-    /** Language of the cited text; a revision number belongs to one language. */
-    locale?: Locale;
   };
   Chatbot: undefined;
   ReportAnswer: { messageId: string };

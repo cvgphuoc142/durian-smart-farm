@@ -6,7 +6,6 @@ import { SignOutDialog } from '@/components/domain';
 import {
   Button,
   Card,
-  ConfirmDialog,
   Header,
   InfoBanner,
   Screen,
@@ -14,26 +13,17 @@ import {
   Text,
   useToast,
 } from '@/components/ui';
-import { DELETION_REQUEST_URL } from '@/config';
-import {
-  deleteAccount,
-  logout,
-  useIsOnline,
-  useRequireOnline,
-  useUnsyncedScanCount,
-} from '@/hooks';
+import { logout, useUnsyncedScanCount } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
-import { openExternal } from '@/services';
 import { useAuthStore } from '@/stores/authStore';
 import { requestSync } from '@/sync';
 import { spacing } from '@/theme';
 
-type Dialog = 'signOut' | 'delete' | null;
+type Dialog = 'signOut' | null;
 
 /**
- * SC-27: who is signed in, sign out / switch account, and account deletion. Signing out with scans
- * that never reached the server offers to send them first (FR-X10). Deleting works from inside the
- * app, and there is a web link for a farmer who can no longer open it (FR-X09).
+ * SC-27: who is signed in and sign out / switch account. Signing out with scans that never reached
+ * the server offers to send them first (FR-X10).
  */
 export function Account() {
   const { t } = useTranslation();
@@ -41,10 +31,7 @@ export function Account() {
   const toast = useToast();
   const user = useAuthStore((s) => s.user);
   const unsynced = useUnsyncedScanCount();
-  const online = useIsOnline();
-  const { guard } = useRequireOnline();
   const [dialog, setDialog] = useState<Dialog>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const close = () => setDialog(null);
 
@@ -57,22 +44,6 @@ export function Account() {
     close();
     void requestSync();
     toast.show(t('account.sendingScans'), 'info');
-  };
-
-  const confirmDelete = async () => {
-    if (deleting) return;
-    setDeleting(true);
-    try {
-      await deleteAccount();
-    } catch {
-      setDeleting(false);
-      close();
-      toast.show(t('account.deleteFailed'), 'error');
-    }
-  };
-
-  const requestDeletion = async () => {
-    if (!(await openExternal(DELETION_REQUEST_URL))) toast.show(t('settings.linkFailed'), 'error');
   };
 
   const provider = user ? t(`account.${user.provider}`) : '';
@@ -110,46 +81,12 @@ export function Account() {
           />
         </Section>
 
-        <Section title={t('account.delete')} flush>
-          <Text variant="secondary" color="textMuted" style={{ marginBottom: spacing.md }}>
-            {t('account.deleteHint')}
-          </Text>
-          {!online ? (
-            <InfoBanner tone="warning" icon="wifiOff" text={t('account.deleteOffline')} />
-          ) : null}
-          <Button
-            label={t('account.delete')}
-            variant="danger"
-            onPress={guard(() => setDialog('delete'))}
-            style={{ marginTop: spacing.sm }}
-          />
-          <Button
-            label={t('account.requestDeletion')}
-            variant="ghost"
-            onPress={() => void requestDeletion()}
-            style={{ marginTop: spacing.sm }}
-          />
-        </Section>
-
         <SignOutDialog
           visible={dialog === 'signOut'}
           unsyncedScans={unsynced}
           onSyncFirst={sendFirst}
           onConfirm={() => void signOut()}
           onCancel={close}
-        />
-        <ConfirmDialog
-          visible={dialog === 'delete'}
-          destructive
-          title={t('account.deleteTitle')}
-          message={
-            unsynced > 0
-              ? t('account.deleteBodyUnsynced', { count: unsynced })
-              : t('account.deleteBody')
-          }
-          confirmLabel={t('account.deleteConfirm')}
-          onConfirm={() => void confirmDelete()}
-          onCancel={() => (deleting ? undefined : close())}
         />
       </View>
     </Screen>

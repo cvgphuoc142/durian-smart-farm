@@ -21,7 +21,15 @@
     "discard": "Bỏ thay đổi",
     "keepEditing": "Tiếp tục sửa",
     "monthYear": "Tháng {{month}}/{{year}}",
-    "weekdaysShort": ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+    "weekdaysShort": [
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "T6",
+      "T7",
+      "CN"
+    ],
     "loadError": "Không tải được dữ liệu. Kiểm tra kết nối rồi thử lại.",
     "draftRestored": "Đã khôi phục bản nháp",
     "saved": "Đã lưu"
@@ -77,7 +85,8 @@
     "flower_induction": "Xử lý ra hoa",
     "flowering_fruit_set": "Ra hoa, đậu quả",
     "fruit_growth": "Nuôi quả",
-    "harvest": "Thu hoạch"
+    "harvest": "Thu hoạch",
+    "other": "Khác"
   },
   "careKinds": {
     "watering": "Tưới",
@@ -198,6 +207,7 @@
     "seasonName": "Tên vụ",
     "startedOn": "Ngày bắt đầu",
     "stage": "Giai đoạn",
+    "stageOther": "Nhập giai đoạn",
     "expectedHarvest": "Dự kiến thu hoạch",
     "closedOn": "Ngày đóng vụ",
     "addFarm": "Thêm vườn",
@@ -445,15 +455,10 @@
     "sentPhotoOnly": "Đã gửi dữ liệu, đang gửi ảnh"
   },
   "content": {
-    "lang": {
-      "vi": "Tiếng Việt",
-      "en": "English"
-    },
     "categories": {
       "disease": "Bệnh hại",
       "care": "Chăm sóc"
     },
-    "fallbackShort": "Bản gốc: {{lang}}",
     "refresh": "Cập nhật nội dung",
     "download": "Tải nội dung",
     "updateFailed": "Chưa tải được nội dung. Kiểm tra kết nối rồi thử lại.",
@@ -483,7 +488,6 @@
     "missingVersionBody": "Phiên bản được trích dẫn chưa có trên máy. Cập nhật nội dung khi có mạng, hoặc xem bản hiện hành.",
     "openCurrent": "Xem bản hiện hành",
     "version": "Bản {{no}} · {{date}}",
-    "fallback": "Chưa có bản dịch cho bản này, đang hiện bản gốc ({{lang}}).",
     "oldVersion": "Đây là bản {{no}}, không còn là bản hiện hành.",
     "sources": "Nguồn",
     "noSources": "Bài chưa ghi nguồn.",
@@ -491,7 +495,6 @@
   },
   "chat": {
     "openSource": "Mở nguồn {{title}}",
-    "sourceLanguage": "nguồn {{lang}}",
     "placeholder": "Hỏi về bài viết, vụ hoặc ca bệnh của bạn",
     "searchPlaceholder": "Gõ từ khóa để tìm bài đã tải",
     "input": "Câu hỏi",
@@ -546,7 +549,6 @@
     "progress": "Đã tự đánh dấu {{done}}/{{total}}",
     "forSeason": "Cho vụ: {{season}}",
     "current": "hiện hành",
-    "fallback": "Checklist chưa có bản dịch đầy đủ, đang hiện bản gốc ({{lang}}).",
     "oldVersion": "Bản cũ chỉ để xem lại. Bản hiện hành bắt đầu với các ô chưa đánh dấu.",
     "noSeason": "Chưa có vụ nào để đánh dấu. Tạo vụ trong Quản lý vườn.",
     "cached": "Đang hiện dấu đánh dấu đã lưu trên máy.",
@@ -624,8 +626,6 @@
     "contentFailed": "Chưa tải được. Nội dung cũ vẫn dùng được.",
     "contentUnsupported": "Cần cập nhật ứng dụng để tải nội dung mới.",
     "about": "Thông tin",
-    "policy": "Chính sách quyền riêng tư",
-    "support": "Hỗ trợ",
     "version": "Phiên bản ứng dụng",
     "linkFailed": "Không mở được liên kết."
   },
@@ -638,16 +638,6 @@
     "signOut": "Đăng xuất",
     "switch": "Đổi tài khoản",
     "unsyncedWarning": "Còn {{count}} scan chưa gửi lên máy chủ.",
-    "delete": "Xóa tài khoản",
-    "deleteHint": "Xóa tài khoản và toàn bộ dữ liệu vườn trên máy chủ và trên điện thoại này. Không thể khôi phục.",
-    "deleteTitle": "Xóa tài khoản?",
-    "deleteBody": "Vườn, lô, vụ, nhật ký, chi phí, bán hàng, ca bệnh và scan của bạn sẽ bị xóa vĩnh viễn, kể cả trên điện thoại này. Cần có mạng.",
-    "deleteBodyUnsynced": "Còn {{count}} scan chưa gửi cũng sẽ bị xóa. Vườn, lô, vụ, nhật ký, chi phí, bán hàng và ca bệnh sẽ bị xóa vĩnh viễn. Cần có mạng.",
-    "deleteConfirm": "Xóa vĩnh viễn",
-    "deleteFailed": "Chưa xóa được tài khoản. Chưa có gì bị xóa trên điện thoại, hãy thử lại.",
-    "deleteOffline": "Cần có mạng để xóa tài khoản.",
-    "requestDeletion": "Không mở được ứng dụng? Gửi yêu cầu xóa tài khoản",
-    "requestDeletionHint": "Mở trang web yêu cầu xóa tài khoản bên ngoài ứng dụng.",
     "sendingScans": "Đang gửi các scan…"
   }
 }

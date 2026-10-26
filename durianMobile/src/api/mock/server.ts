@@ -19,6 +19,7 @@ const DEFAULTS: { [E in EntityName]: AnyRow } = {
   farm: { province: null, locality_text: null },
   plot: { variety: null, area_ha: null, tree_count: null, planted_year: null },
   season: {
+    stage_other: null,
     expected_harvest_on: null,
     closed_on: null,
     forecast_yield_kg: null,

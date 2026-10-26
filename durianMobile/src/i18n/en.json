@@ -21,7 +21,15 @@
     "discard": "Discard",
     "keepEditing": "Keep editing",
     "monthYear": "{{month}}/{{year}}",
-    "weekdaysShort": ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+    "weekdaysShort": [
+      "Mo",
+      "Tu",
+      "We",
+      "Th",
+      "Fr",
+      "Sa",
+      "Su"
+    ],
     "loadError": "Couldn't load the data. Check your connection and try again.",
     "draftRestored": "Draft restored",
     "saved": "Saved"
@@ -77,7 +85,8 @@
     "flower_induction": "Flower induction",
     "flowering_fruit_set": "Flowering and fruit set",
     "fruit_growth": "Fruit growth",
-    "harvest": "Harvest"
+    "harvest": "Harvest",
+    "other": "Other"
   },
   "careKinds": {
     "watering": "Watering",
@@ -198,6 +207,7 @@
     "seasonName": "Season name",
     "startedOn": "Start date",
     "stage": "Stage",
+    "stageOther": "Describe the stage",
     "expectedHarvest": "Expected harvest",
     "closedOn": "Closed on",
     "addFarm": "Add farm",
@@ -445,15 +455,10 @@
     "sentPhotoOnly": "Data sent, photo still sending"
   },
   "content": {
-    "lang": {
-      "vi": "Tiếng Việt",
-      "en": "English"
-    },
     "categories": {
       "disease": "Diseases",
       "care": "Care"
     },
-    "fallbackShort": "Original: {{lang}}",
     "refresh": "Update content",
     "download": "Download content",
     "updateFailed": "Could not download the content. Check your connection and try again.",
@@ -483,7 +488,6 @@
     "missingVersionBody": "The cited version is not on the phone yet. Update the content when you have a connection, or open the current version.",
     "openCurrent": "Open the current version",
     "version": "Version {{no}} · {{date}}",
-    "fallback": "This version has no translation yet, so the original ({{lang}}) is shown.",
     "oldVersion": "This is version {{no}}, which is no longer the current one.",
     "sources": "Sources",
     "noSources": "No source recorded.",
@@ -491,7 +495,6 @@
   },
   "chat": {
     "openSource": "Open source {{title}}",
-    "sourceLanguage": "{{lang}} source",
     "placeholder": "Ask about articles, your season or your cases",
     "searchPlaceholder": "Type words to search the downloaded articles",
     "input": "Question",
@@ -546,7 +549,6 @@
     "progress": "You marked {{done}}/{{total}}",
     "forSeason": "For season: {{season}}",
     "current": "current",
-    "fallback": "The checklist has no complete translation yet, so the original ({{lang}}) is shown.",
     "oldVersion": "An old version is for review only. The current version starts with nothing marked.",
     "noSeason": "No season to mark yet. Create one under Manage farm.",
     "cached": "Showing the marks saved on this phone.",
@@ -624,8 +626,6 @@
     "contentFailed": "Could not download. The old content still works.",
     "contentUnsupported": "Update the app to download newer content.",
     "about": "About",
-    "policy": "Privacy policy",
-    "support": "Support",
     "version": "App version",
     "linkFailed": "Could not open the link."
   },
@@ -638,16 +638,6 @@
     "signOut": "Sign out",
     "switch": "Switch account",
     "unsyncedWarning": "{{count}} scans are not on the server yet.",
-    "delete": "Delete account",
-    "deleteHint": "Deletes the account and all orchard data on the server and on this phone. This cannot be undone.",
-    "deleteTitle": "Delete account?",
-    "deleteBody": "Your farms, plots, seasons, care logs, expenses, sales, cases and scans will be deleted for good, including on this phone. You need a connection.",
-    "deleteBodyUnsynced": "{{count}} scans not yet sent will be deleted too. Your farms, plots, seasons, care logs, expenses, sales and cases will be deleted for good. You need a connection.",
-    "deleteConfirm": "Delete for good",
-    "deleteFailed": "Could not delete the account. Nothing was removed from this phone, try again.",
-    "deleteOffline": "You need a connection to delete the account.",
-    "requestDeletion": "Cannot open the app? Request account deletion",
-    "requestDeletionHint": "Opens a web page to request deletion from outside the app.",
     "sendingScans": "Sending scans…"
   }
 }

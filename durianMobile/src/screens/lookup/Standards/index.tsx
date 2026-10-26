@@ -5,7 +5,7 @@ import { View } from 'react-native';
 
 import { upsert } from '@/api';
 import { newId } from '@/api/ids';
-import { StandardItemRow, useLanguageName } from '@/components/domain';
+import { StandardItemRow } from '@/components/domain';
 import {
   Badge,
   Card,
@@ -46,7 +46,6 @@ export function Standards() {
   const f = useFormat();
   const nav = useAppNavigation();
   const toast = useToast();
-  const lang = useLanguageName();
   const { guard, online } = useRequireOnline();
   const params = useRoute<RouteProp<RootStackParamList, 'Standards'>>().params;
   const standards = useStandards();
@@ -158,7 +157,6 @@ export function Standards() {
                 <View style={{ gap: spacing.sm }}>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
                     <Badge label={t('standards.version', { no: version.version_no })} tone="info" />
-                    <Badge label={lang(version.locale)} tone="neutral" icon="globe" />
                     {version.effective_on ? (
                       <Badge
                         label={t('standards.effective', { date: f.date(version.effective_on) })}
@@ -167,6 +165,12 @@ export function Standards() {
                       />
                     ) : null}
                   </View>
+                  <Text variant="bodyStrong">{version.title}</Text>
+                  {version.description ? (
+                    <Text variant="secondary" color="textMuted">
+                      {version.description}
+                    </Text>
+                  ) : null}
                   <Text variant="heading" accessibilityLiveRegion="polite">
                     {t('standards.progress', { done, total })}
                   </Text>
@@ -193,13 +197,6 @@ export function Standards() {
                 </ChipRow>
               ) : null}
 
-              {version.is_fallback ? (
-                <InfoBanner
-                  tone="warning"
-                  icon="globe"
-                  text={t('standards.fallback', { lang: lang(version.source_locale) })}
-                />
-              ) : null}
               {readOnly ? (
                 <InfoBanner tone="warning" icon="clock" text={t('standards.oldVersion')} />
               ) : null}

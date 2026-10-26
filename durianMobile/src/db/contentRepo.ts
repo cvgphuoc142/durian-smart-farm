@@ -6,7 +6,6 @@ import type {
   ContactKind,
   ContentRelease,
   Disease,
-  Locale,
   StandardProfile,
   StandardVersion,
 } from '@/types';
@@ -17,7 +16,6 @@ export interface ContentMeta {
   release_no: number;
   checksum: string;
   schema_version: number;
-  locales: Locale[];
   installed_at: string;
   /** Last time the app asked the server whether a newer release exists. */
   checked_at: string;
@@ -27,10 +25,6 @@ interface ArticleRow {
   article_id: string;
   version_id: string;
   version_no: number;
-  locale: Locale;
-  translation_revision: number;
-  source_locale: Locale;
-  is_fallback: number;
   title: string;
   body: string;
   category: string | null;
@@ -45,10 +39,6 @@ const toArticle = (r: ArticleRow): Article => ({
   id: r.article_id,
   version_id: r.version_id,
   version_no: r.version_no,
-  translation_revision: r.translation_revision,
-  locale: r.locale,
-  is_fallback: r.is_fallback === 1,
-  source_locale: r.source_locale,
   title: r.title,
   body: r.body,
   category: r.category,
@@ -59,35 +49,10 @@ const toArticle = (r: ArticleRow): Article => ({
   published_at: r.published_at,
 });
 
-/** Newest translation revision first. */
-const byRevision = (a: Article, b: Article) => b.translation_revision - a.translation_revision;
-
-/**
- * Which text of one article version to show in `locale` (FR-C04, AC-23): the translation if the
- * version has one, otherwise the source text **of the same version**, flagged as a fallback. A
- * translation of another version is never used in its place.
- */
-function pickText(rows: Article[], locale: Locale): Article | null {
-  const mine = rows.filter((r) => r.locale === locale).sort(byRevision)[0];
-  if (mine) return mine;
-  const source = rows.find((r) => r.locale === r.source_locale);
-  const original = source
-    ? rows
-        .filter((r) => r.locale === source.locale)
-        .sort(byRevision)
-        .at(0)
-    : rows.slice().sort(byRevision)[0];
-  return original ? { ...original, is_fallback: true } : null;
-}
-
-/** The current (highest) version of an article, in the best language for `locale`. */
-function resolveCurrent(rows: Article[], locale: Locale): Article | null {
+/** The current (highest) version of an article. */
+function resolveCurrent(rows: Article[]): Article | null {
   if (rows.length === 0) return null;
-  const top = Math.max(...rows.map((r) => r.version_no));
-  return pickText(
-    rows.filter((r) => r.version_no === top),
-    locale,
-  );
+  return rows.reduce((top, r) => (r.version_no > top.version_no ? r : top));
 }
 
 const groupBy = <T>(rows: T[], key: (r: T) => string) => {
@@ -111,7 +76,6 @@ export async function getMeta(): Promise<ContentMeta | null> {
     release_no: Number(m.get('release_no')),
     checksum: m.get('checksum') ?? '',
     schema_version: Number(m.get('schema_version') ?? 1),
-    locales: JSON.parse(m.get('locales') ?? '[]'),
     installed_at: m.get('installed_at') ?? '',
     checked_at: m.get('checked_at') ?? '',
   };
@@ -144,23 +108,18 @@ export async function installRelease(release: ContentRelease, at: string): Promi
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `DELETE FROM content_article WHERE article_id || '|' || version_id || '|' || translation_revision
+      `DELETE FROM content_article WHERE article_id || '|' || version_id
          NOT IN (SELECT key FROM content_pin WHERE kind = 'article')`,
     );
     for (const a of release.articles) {
       await db.runAsync(
         `INSERT OR REPLACE INTO content_article
-           (article_id, version_id, version_no, locale, translation_revision, source_locale,
-            is_fallback, title, body, category, disease_code, plant_parts, stages, source_links,
-            published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (article_id, version_id, version_no, title, body, category, disease_code, plant_parts,
+            stages, source_links, published_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         a.id,
         a.version_id,
         a.version_no,
-        a.locale,
-        a.translation_revision,
-        a.source_locale,
-        a.is_fallback ? 1 : 0,
         a.title,
         a.body,
         a.category,
@@ -195,10 +154,9 @@ export async function installRelease(release: ContentRelease, at: string): Promi
     );
     for (const v of release.standard_versions) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO content_standard_version (id, locale, profile_id, version_no, json)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO content_standard_version (id, profile_id, version_no, json)
+         VALUES (?, ?, ?, ?)`,
         v.id,
-        v.locale,
         v.profile_id,
         v.version_no,
         JSON.stringify(v),
@@ -227,14 +185,13 @@ export async function installRelease(release: ContentRelease, at: string): Promi
       release_no: String(release.release_no),
       checksum: release.checksum,
       schema_version: String(release.schema_version),
-      locales: JSON.stringify(release.available_locales),
       installed_at: at,
       checked_at: at,
     });
   });
 }
 
-/** Folded text of every stored article row, with the names of its disease in every language. */
+/** Folded text of every stored article row, with the names of its disease. */
 async function rebuildIndex(diseases: Disease[]) {
   const db = await getDb();
   const names = new Map(diseases.map((d) => [d.code, Object.values(d.names).join(' ')]));
@@ -255,9 +212,8 @@ export async function pin(kind: 'article' | 'standard', key: string) {
   await db.runAsync('INSERT OR IGNORE INTO content_pin (kind, key) VALUES (?, ?)', kind, key);
 }
 
-export const citationKey = (
-  c: Pick<Citation, 'article_id' | 'version_id' | 'translation_revision'>,
-) => `${c.article_id}|${c.version_id}|${c.translation_revision}`;
+export const citationKey = (c: Pick<Citation, 'article_id' | 'version_id'>) =>
+  `${c.article_id}|${c.version_id}`;
 
 /** Keeps the exact text a chatbot answer cited, whatever later releases do. */
 export async function pinCitations(citations: Citation[]) {
@@ -271,7 +227,6 @@ export async function pinStandardVersion(versionId: string) {
 // ---------------------------------------------------------------------------- articles
 
 export interface ArticleQuery {
-  locale: Locale;
   /** Words typed in the search box; diacritics and case do not matter. */
   text?: string;
   category?: string | null;
@@ -289,7 +244,7 @@ export async function listArticles(q: ArticleQuery): Promise<Article[]> {
   const tokens = searchTokens(q.text ?? '');
   let rows: ArticleRow[];
   if (tokens.length > 0) {
-    // A hit on any language or version finds the article; it is then shown in the UI language.
+    // A hit on any version finds the article; its current version is shown.
     const ids = await db.getAllAsync<{ article_id: string }>(
       `SELECT DISTINCT a.article_id FROM content_article_fts f
          JOIN content_article a ON a.rid = f.rowid
@@ -308,7 +263,7 @@ export async function listArticles(q: ArticleQuery): Promise<Article[]> {
 
   const out: Article[] = [];
   for (const group of groupBy(rows.map(toArticle), (r) => r.id).values()) {
-    const a = resolveCurrent(group, q.locale);
+    const a = resolveCurrent(group);
     if (!a) continue;
     if (q.category && a.category !== q.category) continue;
     if (q.part && !a.plant_parts.includes(q.part)) continue;
@@ -322,39 +277,26 @@ export async function listArticles(q: ArticleQuery): Promise<Article[]> {
 }
 
 /** Approved articles for a disease on a body part; one that names no part fits every part. */
-export async function relatedArticles(
-  diseaseCode: string,
-  plantPart: string,
-  locale: Locale,
-): Promise<Article[]> {
-  const list = await listArticles({ locale, diseaseCode });
+export async function relatedArticles(diseaseCode: string, plantPart: string): Promise<Article[]> {
+  const list = await listArticles({ diseaseCode });
   return list.filter((a) => a.plant_parts.length === 0 || a.plant_parts.includes(plantPart));
 }
 
 /**
- * One article. With a `versionId` (and revision) it is exactly that text: no newer version or
- * translation is put in its place, so a citation opens what was cited (FR-C05, AC-25). Returns
- * `null` when that text is not on the phone. A revision number belongs to one language, so a
- * citation also passes its `locale`.
+ * One article. With a `versionId` it is exactly that text: no newer version is put in its place,
+ * so a citation opens what was cited (FR-C05, AC-25). Returns `null` when that text is not on the
+ * phone.
  */
 export async function getArticle(
   id: string,
-  locale: Locale,
-  exact?: { versionId: string; translationRevision?: number; locale?: Locale },
+  exact?: { versionId: string },
 ): Promise<Article | null> {
   const db = await getDb();
   const rows = (
     await db.getAllAsync<ArticleRow>('SELECT * FROM content_article WHERE article_id = ?', id)
   ).map(toArticle);
-  if (!exact) return resolveCurrent(rows, locale);
-  const same = rows.filter(
-    (r) =>
-      r.version_id === exact.versionId &&
-      (exact.translationRevision == null || r.translation_revision === exact.translationRevision),
-  );
-  // A citation names the language of the text it quoted: that text, as it was, not a translation.
-  if (exact.locale) return same.find((r) => r.locale === exact.locale) ?? null;
-  return pickText(same, locale);
+  if (!exact) return resolveCurrent(rows);
+  return rows.find((r) => r.version_id === exact.versionId) ?? null;
 }
 
 export async function isCurrentVersion(articleId: string, versionId: string): Promise<boolean> {
@@ -404,26 +346,14 @@ export async function listProfiles(): Promise<StandardProfile[]> {
   return rows.map((r) => JSON.parse(r.json));
 }
 
-/**
- * One checklist version in the UI language. If it has no translation the source text of the
- * **same version** is shown, flagged as a fallback (AC-23). Items keep their ids in every language,
- * so a tick never depends on the language.
- */
-export async function getStandardVersion(
-  id: string,
-  locale: Locale,
-): Promise<StandardVersion | null> {
+/** One checklist version. Items keep their ids across versions, so a tick never moves. */
+export async function getStandardVersion(id: string): Promise<StandardVersion | null> {
   const db = await getDb();
-  const rows = (
-    await db.getAllAsync<{ json: string }>(
-      'SELECT json FROM content_standard_version WHERE id = ?',
-      id,
-    )
-  ).map((r) => JSON.parse(r.json) as StandardVersion);
-  const mine = rows.find((r) => r.locale === locale);
-  if (mine) return mine;
-  const original = rows.find((r) => r.locale === r.source_locale) ?? rows[0];
-  return original ? { ...original, is_fallback: true } : null;
+  const row = await db.getFirstAsync<{ json: string }>(
+    'SELECT json FROM content_standard_version WHERE id = ?',
+    id,
+  );
+  return row ? (JSON.parse(row.json) as StandardVersion) : null;
 }
 
 /** Versions of a profile that are on the phone, newest first (the current one and pinned old ones). */

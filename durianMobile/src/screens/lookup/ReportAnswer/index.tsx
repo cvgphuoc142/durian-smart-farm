@@ -86,18 +86,6 @@ export function ReportAnswer() {
   return (
     <Screen
       header={header}
-      footer={
-        send.isSuccess ? (
-          <Button label={t('common.done')} onPress={() => nav.goBack()} />
-        ) : (
-          <Button
-            icon="send"
-            label={t('report.confirm')}
-            loading={send.isPending}
-            onPress={confirm}
-          />
-        )
-      }
       contentStyle={{ paddingHorizontal: spacing.gutter, gap: spacing.md }}
     >
       <View testID="screen-ReportAnswer" style={{ gap: spacing.md }}>
@@ -123,10 +111,7 @@ export function ReportAnswer() {
               <Text variant="secondary">{t('report.noSources')}</Text>
             ) : (
               citations.map((c) => (
-                <Text
-                  key={`${c.article_id}-${c.version_id}-${c.translation_revision}`}
-                  variant="secondary"
-                >
+                <Text key={`${c.article_id}-${c.version_id}`} variant="secondary">
                   {`${c.title} · v${c.version_no}`}
                 </Text>
               ))
@@ -140,6 +125,17 @@ export function ReportAnswer() {
             placeholder={t('report.reasonPlaceholder')}
             accessibilityLabel={t('report.reason')}
             multiline
+          />
+        )}
+        {/* In the content, not the footer: the form sheet is shorter than the screen and clips a footer. */}
+        {send.isSuccess ? (
+          <Button label={t('common.done')} onPress={() => nav.goBack()} />
+        ) : (
+          <Button
+            icon="send"
+            label={t('report.confirm')}
+            loading={send.isPending}
+            onPress={confirm}
           />
         )}
       </View>
