@@ -20,7 +20,7 @@ import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useContextStore } from '@/stores';
 import { spacing } from '@/theme';
 import type { Farm, Plot, Season } from '@/types';
-import { today } from '@/utils';
+import { stageLabel, today } from '@/utils';
 
 import { FarmSheet, PlotSheet, SeasonSheet } from './sheets';
 
@@ -128,7 +128,7 @@ export function FarmManage() {
                           <ListRow
                             key={season.id}
                             title={season.name}
-                            subtitle={`${t(`stages.${season.stage}`)} · ${f.date(season.started_on)}`}
+                            subtitle={`${stageLabel(t, season)} · ${f.date(season.started_on)}`}
                             trailing={
                               <Badge
                                 label={t(season.closed_on ? 'context.closed' : 'context.open')}

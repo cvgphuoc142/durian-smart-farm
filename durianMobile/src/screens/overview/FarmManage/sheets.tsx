@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRef, type ReactNode } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, View } from 'react-native';
 import { z } from 'zod';
@@ -198,35 +198,43 @@ export function SeasonSheet({
     name: requiredText(t),
     startedOn: z.date(),
     stage: z.enum(SEASON_STAGES),
+    stageOther: z.string().trim(),
     expectedHarvest: z.date().nullable(),
     yieldKg: optionalNumber(t),
     price: optionalNumber(t),
     cost: optionalNumber(t),
   });
   type V = z.infer<typeof schema>;
+  const checked = schema.refine((v) => v.stage !== 'other' || v.stageOther !== '', {
+    path: ['stageOther'],
+    message: t('form.required'),
+  });
   const toForm = (s: Season): V => ({
     name: s.name,
     startedOn: fromDateString(s.started_on),
     stage: s.stage,
+    stageOther: s.stage_other ?? '',
     expectedHarvest: s.expected_harvest_on ? fromDateString(s.expected_harvest_on) : null,
     yieldKg: s.forecast_yield_kg ?? '',
     price: s.forecast_price_vnd_kg ?? '',
     cost: s.forecast_total_cost_vnd ?? '',
   });
   const form = useForm<V>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(checked),
     defaultValues: season
       ? toForm(season)
       : {
           name: t('setup.defaultSeason', { year: new Date().getFullYear() }),
           startedOn: new Date(),
           stage: 'recovery',
+          stageOther: '',
           expectedHarvest: null,
           yieldKg: '',
           price: '',
           cost: '',
         },
   });
+  const stage = useWatch({ control: form.control, name: 'stage' });
   const write = useWrite({
     onSuccess: onClose,
     onConflict: (rows) => {
@@ -254,6 +262,14 @@ export function SeasonSheet({
         label={t('manage.stage')}
         options={SEASON_STAGES.map((s) => ({ id: s, label: t(`stages.${s}`) }))}
       />
+      {stage === 'other' ? (
+        <ControlledTextInput
+          control={form.control}
+          name="stageOther"
+          label={t('manage.stageOther')}
+          required
+        />
+      ) : null}
       <ControlledDatePicker
         control={form.control}
         name="expectedHarvest"
@@ -289,6 +305,7 @@ export function SeasonSheet({
             name: v.name.trim(),
             started_on: toDateString(v.startedOn),
             stage: v.stage,
+            stage_other: v.stage === 'other' ? v.stageOther.trim() : null,
             expected_harvest_on: v.expectedHarvest ? toDateString(v.expectedHarvest) : null,
             forecast_yield_kg: money.normalizeKg(v.yieldKg),
             forecast_price_vnd_kg: money.normalizeVnd(v.price),

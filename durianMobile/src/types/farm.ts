@@ -22,6 +22,7 @@ export const SEASON_STAGES = [
   'flowering_fruit_set',
   'fruit_growth',
   'harvest',
+  'other',
 ] as const;
 export type SeasonStage = (typeof SEASON_STAGES)[number];
 
@@ -30,6 +31,8 @@ export interface Season extends Entity {
   name: string;
   started_on: DateString;
   stage: SeasonStage;
+  /** Free text; set when, and only when, `stage` is 'other'. */
+  stage_other: string | null;
   expected_harvest_on: DateString | null;
   /** Set when the farmer closes the season. At most one season per plot has this `null`. */
   closed_on: DateString | null;

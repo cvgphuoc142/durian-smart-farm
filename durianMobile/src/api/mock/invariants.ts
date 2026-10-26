@@ -69,6 +69,9 @@ function checkRow(t: Tables, entity: EntityName, row: Record<string, any>): Viol
       if (blank(row.name)) return fail('required', 'name');
       if (blank(row.started_on)) return fail('required', 'started_on');
       if (!SEASON_STAGES.includes(row.stage)) return fail('invalid', 'stage');
+      if ((row.stage === 'other') !== (row.stage_other != null)) {
+        return fail('invalid', 'stage_other');
+      }
       for (const f of ['forecast_yield_kg', 'forecast_price_vnd_kg', 'forecast_total_cost_vnd']) {
         if (row[f] != null && !nonNegative(row[f])) return fail('invalid', f);
       }

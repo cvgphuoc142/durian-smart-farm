@@ -22,7 +22,7 @@ import {
 import { useFormat, useSeasonData } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
-import { money } from '@/utils';
+import { money, stageLabel } from '@/utils';
 
 /**
  * SC-03: the season at a glance. Every number is worked out from the rows of the selected season
@@ -78,7 +78,7 @@ export function SeasonOverview() {
               <View style={{ height: spacing.sm }} />
               <KeyValueGrid
                 items={[
-                  { label: t('manage.stage'), value: t(`stages.${season.stage}`) },
+                  { label: t('manage.stage'), value: stageLabel(t, season) },
                   { label: t('manage.startedOn'), value: f.date(season.started_on) },
                   {
                     label: t('manage.expectedHarvest'),

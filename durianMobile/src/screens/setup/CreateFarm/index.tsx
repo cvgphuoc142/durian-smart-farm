@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { z } from 'zod';
@@ -40,11 +40,16 @@ export function CreateFarm() {
     seasonName: requiredText(t),
     startedOn: z.date(),
     stage: z.enum(SEASON_STAGES),
+    stageOther: z.string().trim(),
   });
   type Values = z.infer<typeof schema>;
+  const stageSchema = schema.refine((v) => v.stage !== 'other' || v.stageOther !== '', {
+    path: ['stageOther'],
+    message: t('form.required'),
+  });
 
   const form = useForm<Values>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(stageSchema),
     defaultValues: {
       farmName: '',
       province: '',
@@ -54,6 +59,7 @@ export function CreateFarm() {
       seasonName: t('setup.defaultSeason', { year: new Date().getFullYear() }),
       startedOn: new Date(),
       stage: 'recovery',
+      stageOther: '',
     },
   });
   const draft = useFormDraft(KEY, form);
@@ -91,6 +97,7 @@ export function CreateFarm() {
           name: v.seasonName.trim(),
           started_on: toDateString(v.startedOn),
           stage: v.stage,
+          stage_other: v.stage === 'other' ? v.stageOther.trim() : null,
         },
         null,
       ),
@@ -99,6 +106,7 @@ export function CreateFarm() {
 
   const stageOptions = SEASON_STAGES.map((id) => ({ id, label: t(`stages.${id}`) }));
   const { control } = form;
+  const stage = useWatch({ control, name: 'stage' });
 
   return (
     <FormScreen
@@ -162,6 +170,14 @@ export function CreateFarm() {
         label={t('manage.stage')}
         options={stageOptions}
       />
+      {stage === 'other' ? (
+        <ControlledTextInput
+          control={control}
+          name="stageOther"
+          label={t('manage.stageOther')}
+          required
+        />
+      ) : null}
       <View style={{ height: spacing.md }} />
     </FormScreen>
   );
