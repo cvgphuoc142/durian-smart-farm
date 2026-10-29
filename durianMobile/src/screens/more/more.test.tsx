@@ -115,6 +115,7 @@ describe('SC-22: More', () => {
       await waitFor(() =>
         expect(screen.getAllByTestId(`screen-${screenName}`).length).toBeGreaterThan(0),
       );
+      await act(async () => {}); // let the screen's local reads settle
       fireEvent.press(screen.getAllByLabelText(t('common.back')).at(-1)!);
     }
   });
@@ -161,6 +162,7 @@ describe('SC-27: account (AC-17, AC-18)', () => {
   it('signs out and returns to sign-in', async () => {
     await start();
     await openMore(t('more.account'));
+    await act(async () => {}); // let the unsent-scans count settle before signing out
     press(t('account.signOut'));
     press(t('dialogs.signOut.confirm'));
     await screen.findByTestId('screen-SignIn');
@@ -170,7 +172,7 @@ describe('SC-27: account (AC-17, AC-18)', () => {
   it('warns about scans not sent, and discards them only on confirmation (FR-X10)', async () => {
     await start();
     jest.spyOn(scanRepo, 'countUnsynced').mockResolvedValue(2);
-    await openMore(t('more.account'));
+    await act(() => openMore(t('more.account')));
     await shown(t('account.unsyncedWarning', { count: 2 }));
     press(t('account.signOut'));
     await shown(t('dialogs.signOut.unsynced', { count: 2 }));

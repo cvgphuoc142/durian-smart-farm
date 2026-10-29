@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, renderHook, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import { stubEngine } from '@/ai/stub';
@@ -142,10 +142,10 @@ describe('SC-12…14: scan, result, save (AC-07, AC-08)', () => {
     expect(db.tables.scan.size).toBe(0); // nothing sent yet
     await screen.findByText(new RegExp(t('cases.pending')));
 
-    expect(await runOutbox(USER, defaultDeps)).toMatchObject({ synced: 1, failed: 0 });
+    expect(await act(() => runOutbox(USER, defaultDeps))).toMatchObject({ synced: 1, failed: 0 });
     expect(db.tables.scan.size).toBe(1);
     expect(db.tables.disease_case.size).toBe(1);
-    expect(await runOutbox(USER, defaultDeps)).toMatchObject({ synced: 0 });
+    expect(await act(() => runOutbox(USER, defaultDeps))).toMatchObject({ synced: 0 });
     expect(db.tables.scan.size).toBe(1);
   });
 
@@ -166,7 +166,7 @@ describe('SC-12…14: scan, result, save (AC-07, AC-08)', () => {
 
     mockOnline = true;
     db.sim.offline = false;
-    expect(await runOutbox(USER, defaultDeps)).toMatchObject({ synced: 1 });
+    expect(await act(() => runOutbox(USER, defaultDeps))).toMatchObject({ synced: 1 });
     expect(db.tables.scan.size).toBe(1);
   });
 
@@ -213,9 +213,11 @@ describe('SC-12…14: scan, result, save (AC-07, AC-08)', () => {
 describe('SC-26 scan sync status', () => {
   it('shows the stuck scan with its reason, retries it, and deletes only after confirmation', async () => {
     await start();
-    const id = await makeDraft();
-    await saveScan(USER, id, 's1', { kind: 'none' });
-    await scanRepo.markError(USER, id, 'photo_missing');
+    const id = await act(() => makeDraft());
+    await act(async () => {
+      await saveScan(USER, id, 's1', { kind: 'none' });
+      await scanRepo.markError(USER, id, 'photo_missing');
+    });
 
     // CareLogs header → cases → sync status
     fireEvent.press(screen.getAllByLabelText(t('tabs.journal'))[0]);
@@ -233,7 +235,7 @@ describe('SC-26 scan sync status', () => {
 
   it('a draft can be continued or discarded', async () => {
     await start();
-    await makeDraft();
+    await act(() => makeDraft());
     fireEvent.press(screen.getAllByLabelText(t('tabs.journal'))[0]);
     await screen.findByTestId('screen-CareLogs');
     fireEvent.press(screen.getAllByLabelText(t('screens.Cases')).at(-1)!);

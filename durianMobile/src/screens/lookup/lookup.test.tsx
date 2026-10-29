@@ -286,7 +286,9 @@ describe('SC-21: standards and checklist (AC-16, AC-23)', () => {
     await shown(t('standards.oldVersion'));
     // The old version is read-only.
     await tick('Mã vùng trồng (mẫu)');
-    await new Promise((r) => setTimeout(r, 50));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
     const [check] = db.tables.self_check.values();
     expect(check.answers.filter((a) => a.checked)).toHaveLength(1);
     expect(db.tables.self_check.size).toBe(1);

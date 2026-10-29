@@ -51,7 +51,7 @@ describe('money flow on the mock backend (AC-03…05)', () => {
     type(t('expense.amount'), '1500000');
     press(t('common.save'));
     await overviewShows('1.500.000 ₫');
-    expect(screen.queryAllByTestId('screen-AddExpense')).toHaveLength(0);
+    await waitFor(() => expect(screen.queryAllByTestId('screen-AddExpense')).toHaveLength(0));
   });
 
   it('refuses a zero amount and keeps the form', async () => {
