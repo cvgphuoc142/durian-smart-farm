@@ -20,7 +20,7 @@ Hướng dẫn dùng macOS với Homebrew. Cài Homebrew tại https://brew.sh n
 
 | Công cụ | Dùng cho | Cài đặt |
 |---|---|---|
-| Git + Git LFS | Tải code và file model AI (~330MB) | `brew install git git-lfs && git lfs install` |
+| Git | Tải code | `brew install git` |
 | Docker Desktop | Chạy MongoDB, Qdrant, MinIO | https://www.docker.com/products/docker-desktop (mở app lên sau khi cài) |
 | uv | Quản lý Python cho backend | `brew install uv` |
 | Node.js 20+ | Mobile và admin | `brew install node` |
@@ -30,10 +30,10 @@ Hướng dẫn dùng macOS với Homebrew. Cài Homebrew tại https://brew.sh n
 Kiểm tra:
 
 ```bash
-git --version && git lfs version && docker --version && uv --version && node --version
+git --version && docker --version && uv --version && node --version
 ```
 
-Cả 5 lệnh phải in ra phiên bản, không báo `command not found`.
+Cả 4 lệnh phải in ra phiên bản, không báo `command not found`.
 
 ### Lấy code
 
@@ -43,7 +43,7 @@ cd durian-smart-farm
 git checkout develop
 ```
 
-Phải có Git LFS **trước khi** clone. Nếu cài sau, chạy `git lfs pull` để tải 3 file model `.onnx` trong `durianMobile/assets/models/`. Nếu chúng chỉ nặng vài trăm byte thì chưa tải được.
+File model `.onnx` không nằm trong git. Model được publish lên server, app tải về máy qua API (xem mục 3.5).
 
 ---
 
@@ -173,7 +173,8 @@ Lần đầu build mất vài phút. Về sau chỉ cần `npm start` rồi mở
 ### 3.3 Kiểm tra
 
 - App mở ra màn hình đăng nhập, bấm đăng nhập thử và vào được màn hình tổng quan.
-- Vào mục Quét: chọn bộ phận (lá, thân, quả), chụp hoặc chọn ảnh và nhận kết quả. Model chạy ngay trên máy.
+- Vào mục Quét. Lần đầu app chưa có model: bấm "Tải mô hình" (hoặc banner "Có mô hình mới… Tải về"), đợi tải và kiểm tra xong. Sau đó chọn bộ phận, chụp hoặc chọn ảnh và nhận kết quả. Model chạy ngay trên máy, không cần mạng.
+- Bản dùng dữ liệu giả (`EXPO_PUBLIC_USE_MOCK=true`) không có model thật, chỉ có model thử nghiệm của bản dev.
 
 ### 3.4 Lệnh hay dùng
 
@@ -184,15 +185,24 @@ Lần đầu build mất vài phút. Về sau chỉ cần `npm start` rồi mở
 | `npm run lint` | Kiểm tra lint |
 | `npm run format` | Format code |
 
-### 3.5 Thay model AI (chỉ khi nhận được model mới)
+### 3.5 Đưa model AI lên server (khi nhận được model mới)
 
-Model nằm ở `durianMobile/assets/models/` (đã có sẵn, quản lý bằng Git LFS). Khi nhà cung cấp gửi gói model mới:
+App **không đóng gói** model. Model nằm trên server; app lấy `GET /v1/models/manifest`, tải file khi nông dân bấm "Tải về", kiểm sha256, lưu vào máy và giữ một bản cũ để quay lại. Màn Quét, nhãn bệnh, bộ phận, lớp "khỏe" và nhãn "đang hoàn thiện" đều đọc từ manifest, nên model mới chỉ cần publish, không cần build lại app.
+
+Cách 1, trên web admin: mục **Scan models** → Upload model (dán entry JSON, chọn file `.onnx`, viết ghi chú tiếng Việt) → Publish. Bucket lưu trữ cần cho phép `PUT` từ địa chỉ của web admin (CORS).
+
+Cách 2, bằng dòng lệnh từ gói bàn giao:
 
 ```bash
-node scripts/build-model-manifest.mjs ../mobile-model-sdk-handoff
+cd durianMobile
+node scripts/build-model-manifest.mjs ../mobile-model-sdk-handoff   # chép model sang assets/models/ (thư mục này không commit)
+cd ../durianBackend
+uv run python -m scripts.publish_models ../durianMobile/assets/models/manifest.json \
+  --files ../durianMobile/assets/models --maturity beta \
+  --notes "Mô hình nhận diện bệnh, bản đầu tiên" --publish
 ```
 
-Lệnh này sinh `assets/models/manifest.json` và chép file `.onnx` vào đúng chỗ. Sau đó cập nhật các dòng `require(...)` trong `src/ai/bundled.ts` cho khớp tên file mới.
+Publish một bản mới của cùng bộ phận sẽ thay bản đang dùng; publish lại bản cũ là cách quay lui ở phía server. App kiểm manifest khi mở, khi quay lại sau hơn 24 giờ và khi bấm "Kiểm tra" trong Cài đặt; có model mới thì hiện chấm đỏ trên tab Quét. Không bao giờ tự tải khi chưa bấm. Thông báo đẩy cần `extra.eas.projectId` trong `app.json` (chạy `eas init`) và khóa FCM/APNs.
 
 ---
 
@@ -221,7 +231,7 @@ Thử luồng đầy đủ: trong web admin tạo và publish một bài viết,
 | App mobile không gọi được API trên điện thoại thật | Không dùng `localhost`. Dùng IP LAN của máy, cùng Wi-Fi, và `make dev` phải chạy được từ máy khác (thử mở `http://<IP>:8000/healthz` trên điện thoại). |
 | Ảnh không hiện trên điện thoại | Đặt `S3_PUBLIC_ENDPOINT_URL` bằng IP LAN rồi khởi động lại backend, và chắc chắn đã chạy `make storage`. |
 | Đổi `.env` của mobile mà không có tác dụng | Chạy `npx expo start -c`. |
-| App crash hoặc báo thiếu model, file `.onnx` chỉ vài trăm byte | Chạy `git lfs pull` trong thư mục gốc. |
+| Màn Quét báo chưa có model | Server chưa publish model nào (xem 3.5), hoặc điện thoại chưa tải. Vào Cài đặt → Mô hình nhận diện → Kiểm tra. |
 | `expo run:ios` lỗi pod hoặc native | Chạy `cd ios && pod install`, hoặc xoá thư mục `ios`/`android` rồi `npx expo prebuild --clean`. |
 | Web admin đăng nhập báo lỗi | Backend phải đang chạy và đã `make seed`. Kiểm tra `VITE_API_URL` trong `admin-frontend/.env`. |
 
@@ -230,4 +240,4 @@ Thử luồng đầy đủ: trong web admin tạo và publish một bài viết,
 - Nhánh chính để phát triển: `develop`.
 - Commit message viết tiếng Anh, theo dạng `feat(backend): ...`, `fix(mobile): ...`, `chore(admin): ...`.
 - Không commit file `.env`, `node_modules/`, `dist/`.
-- File `.onnx` luôn đi qua Git LFS (đã cấu hình trong `.gitattributes`).
+- Không commit file `.onnx` (đã nằm trong `.gitignore`). Model đi qua server, không đi qua git.
