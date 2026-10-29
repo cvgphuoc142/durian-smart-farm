@@ -1,4 +1,6 @@
-// Builds assets/models/manifest.json and copies the ONNX files from the model handoff folder.
+// Stages the models of a handoff folder for publishing: writes assets/models/manifest.json and copies the
+// ONNX files next to it (the folder is git-ignored; the app downloads models, it does not bundle them).
+// Then, in durianBackend: uv run python -m scripts.publish_models ../durianMobile/assets/models/manifest.json --files ../durianMobile/assets/models --publish
 // Usage: node scripts/build-model-manifest.mjs ../mobile-model-sdk-handoff
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Scan models are published on the server and downloaded by the app (never bundled or committed).
+# assets/models/ is only a local staging folder for scripts/build-model-manifest.mjs.
+assets/models/
+*.onnx

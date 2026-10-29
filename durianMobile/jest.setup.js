@@ -66,3 +66,28 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
   isCancelledResponse: (r) => r?.type === 'cancelled',
   isSuccessResponse: (r) => r?.type === 'success',
 }));
+
+// Model files live on the phone's disk and push needs the OS; tests fake both.
+jest.mock('@/ai/modelFiles', () => ({
+  modelFiles: {
+    freeBytes: () => 1e12,
+    exists: () => true,
+    sizeOf: () => null,
+    remove: () => undefined,
+    move: () => undefined,
+    uri: (rel) => `file:///docs/${rel}`,
+    download: () => ({ done: Promise.resolve(200), cancel: async () => undefined }),
+    sha256: async () => '',
+  },
+  isOnCellular: async () => false,
+}));
+
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn(async () => undefined),
+  getPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: true })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: false })),
+  getExpoPushTokenAsync: jest.fn(async () => ({ data: 'ExponentPushToken[test]' })),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  AndroidImportance: { DEFAULT: 3 },
+}));

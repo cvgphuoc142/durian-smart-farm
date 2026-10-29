@@ -46,6 +46,7 @@
           "photosPermission": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh cây trồng và hóa đơn."
         }
       ],
+      "expo-notifications",
       "expo-asset",
       "expo-sqlite",
       "onnxruntime-react-native",
