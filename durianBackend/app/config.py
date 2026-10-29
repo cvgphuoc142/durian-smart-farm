@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     s3_secret_key: str = "durian-dev-secret"
     s3_region: str = "us-east-1"
     media_url_ttl_s: int = 600
+    # Model files are 30-110 MB on a farm connection: the download link must outlive the download.
+    model_url_ttl_s: int = 3600
 
     # --- LLM / RAG. Provider is swappable (app/llm/factory.py); the key never leaves the server.
     llm_provider: str = "gemini"

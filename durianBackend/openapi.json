@@ -315,6 +315,102 @@
         ]
       }
     },
+    "/v1/me/push-token": {
+      "put": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Set Push Token",
+        "description": "Where to tell this phone that a new scan model is out. One phone token, one owner.",
+        "operationId": "setPushToken",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Setpushtoken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Delete Push Token",
+        "operationId": "deletePushToken",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Deletepushtoken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/me": {
       "get": {
         "tags": [
@@ -695,7 +791,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Transition"
+                "$ref": "#/components/schemas/app__api__v1__admin__Transition"
               }
             }
           }
@@ -993,7 +1089,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Transition"
+                "$ref": "#/components/schemas/app__api__v1__admin__Transition"
               }
             }
           }
@@ -1267,7 +1363,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Transition"
+                "$ref": "#/components/schemas/app__api__v1__admin__Transition"
               }
             }
           }
@@ -1539,6 +1635,398 @@
         }
       }
     },
+    "/v1/admin/models": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List Models",
+        "operationId": "adminListModels",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "plant_part",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plant Part"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Adminlistmodels"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create Model",
+        "description": "Registers a version as a draft and returns where to PUT the file.",
+        "operationId": "adminCreateModel",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Admincreatemodel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/models/{model_id}/upload-url": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Upload Url",
+        "operationId": "adminModelUploadUrl",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Adminmodeluploadurl"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/models/{model_id}/complete": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Complete",
+        "operationId": "adminCompleteModelUpload",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Admincompletemodelupload"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/models/{model_id}": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Edit Model",
+        "description": "Change the notes, the beta flag, the limits or the minimum app version of any version.\nA phone that already has the file just refreshes these; it downloads nothing.",
+        "operationId": "adminEditModel",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Admineditmodel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete Model",
+        "description": "Only a version that was never published; one a phone may hold stays for its history.",
+        "operationId": "adminDeleteModel",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/models/{model_id}/transition": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Transition",
+        "operationId": "adminModelTransition",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__api__v1__admin_models__Transition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Adminmodeltransition"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/content/manifest": {
       "get": {
         "tags": [
@@ -1650,6 +2138,94 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Getarticleversiontext"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models/manifest": {
+      "get": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Manifest",
+        "description": "The published model of every body part. An empty `entries` is the honest \"none yet\".",
+        "operationId": "getModelManifest",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Getmodelmanifest"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/models/{model_id}/{version}/download": {
+      "get": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Download",
+        "description": "A short-lived link to the file of a published version. The phone checks `sha256`.",
+        "operationId": "getModelDownload",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Getmodeldownload"
                 }
               }
             }
@@ -2558,6 +3134,14 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "source_links": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Links",
+            "default": []
           }
         },
         "type": "object",
@@ -2568,6 +3152,78 @@
           "title"
         ],
         "title": "Citation"
+      },
+      "ClassEntry": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Index"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "disease",
+              "healthy",
+              "other"
+            ],
+            "title": "Kind"
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disease Code"
+          },
+          "labels": {
+            "$ref": "#/components/schemas/ClassLabels",
+            "default": {}
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "index",
+          "kind"
+        ],
+        "title": "ClassEntry"
+      },
+      "ClassLabels": {
+        "properties": {
+          "vi": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vi"
+          },
+          "en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "En"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ClassLabels"
       },
       "CompleteRequest": {
         "properties": {
@@ -2716,6 +3372,31 @@
         ],
         "title": "ContactBody"
       },
+      "CreateModel": {
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/ModelEntryBody"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size Bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entry",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "CreateModel"
+      },
       "DiseaseCase": {
         "properties": {
           "id": {
@@ -2809,6 +3490,73 @@
           "note"
         ],
         "title": "DiseaseCase"
+      },
+      "EditModel": {
+        "properties": {
+          "release_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Notes"
+          },
+          "maturity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "stable",
+                  "beta"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity"
+          },
+          "limitations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limitations"
+          },
+          "min_app_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min App Version"
+          },
+          "clear_limitations": {
+            "type": "boolean",
+            "title": "Clear Limitations",
+            "default": false
+          },
+          "clear_min_app_version": {
+            "type": "boolean",
+            "title": "Clear Min App Version",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EditModel",
+        "description": "Only what the farmer reads or what gates the app. The scoring itself is immutable."
       },
       "Expense": {
         "properties": {
@@ -3078,6 +3826,254 @@
         ],
         "title": "LocaleRequest"
       },
+      "ModelEntryBody": {
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model Id"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Version"
+          },
+          "pipeline_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Pipeline Version"
+          },
+          "threshold_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Threshold Version"
+          },
+          "plant_part": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Plant Part"
+          },
+          "part_labels": {
+            "$ref": "#/components/schemas/PartLabels"
+          },
+          "runtime": {
+            "type": "string",
+            "const": "onnx",
+            "title": "Runtime",
+            "default": "onnx"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ModelInput"
+          },
+          "output": {
+            "$ref": "#/components/schemas/ModelOutput"
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/ClassEntry"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Classes"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/Rules"
+          },
+          "release_notes": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Release Notes"
+          },
+          "maturity": {
+            "type": "string",
+            "enum": [
+              "stable",
+              "beta"
+            ],
+            "title": "Maturity"
+          },
+          "supports_healthy": {
+            "type": "boolean",
+            "title": "Supports Healthy"
+          },
+          "limitations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limitations"
+          },
+          "min_app_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min App Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "model_id",
+          "version",
+          "pipeline_version",
+          "threshold_version",
+          "plant_part",
+          "part_labels",
+          "input",
+          "output",
+          "classes",
+          "rules",
+          "release_notes",
+          "maturity",
+          "supports_healthy"
+        ],
+        "title": "ModelEntryBody",
+        "description": "Everything about a model except its file."
+      },
+      "ModelInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Height"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "NCHW",
+              "NHWC"
+            ],
+            "title": "Layout"
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "RGB",
+              "BGR"
+            ],
+            "title": "Color"
+          },
+          "scale": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Scale"
+          },
+          "mean": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Mean"
+          },
+          "std": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Std"
+          },
+          "resize": {
+            "type": "string",
+            "enum": [
+              "stretch",
+              "center_crop",
+              "letterbox"
+            ],
+            "title": "Resize"
+          },
+          "pad": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array",
+                "maxItems": 3,
+                "minItems": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pad"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "width",
+          "height",
+          "layout",
+          "color",
+          "scale",
+          "mean",
+          "std",
+          "resize"
+        ],
+        "title": "ModelInput"
+      },
+      "ModelOutput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "activation": {
+            "type": "string",
+            "enum": [
+              "softmax",
+              "sigmoid",
+              "none",
+              "temperature_softmax"
+            ],
+            "title": "Activation"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "activation"
+        ],
+        "title": "ModelOutput"
+      },
       "Mutation": {
         "properties": {
           "mutation_id": {
@@ -3168,6 +4164,27 @@
           "expected_revision"
         ],
         "title": "Op"
+      },
+      "PartLabels": {
+        "properties": {
+          "vi": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Vi"
+          },
+          "en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "En"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vi",
+          "en"
+        ],
+        "title": "PartLabels"
       },
       "Plot": {
         "properties": {
@@ -3339,6 +4356,78 @@
           "sha256"
         ],
         "title": "PrepareRequest"
+      },
+      "PushTokenRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android"
+            ],
+            "title": "Platform"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "platform"
+        ],
+        "title": "PushTokenRequest"
+      },
+      "Rules": {
+        "properties": {
+          "suspected_min": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Suspected Min"
+          },
+          "healthy_min": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Healthy Min"
+          },
+          "margin_min": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Min"
+          },
+          "energy_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Energy Max"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "suspected_min",
+          "healthy_min"
+        ],
+        "title": "Rules"
       },
       "Sale": {
         "properties": {
@@ -4103,38 +5192,6 @@
         ],
         "title": "SyncResponse"
       },
-      "Transition": {
-        "properties": {
-          "action": {
-            "type": "string",
-            "enum": [
-              "submit_review",
-              "approve",
-              "publish",
-              "unpublish",
-              "reject_to_draft"
-            ],
-            "title": "Action"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "action"
-        ],
-        "title": "Transition"
-      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -4174,6 +5231,56 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "app__api__v1__admin__Transition": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "submit_review",
+              "approve",
+              "publish",
+              "unpublish",
+              "reject_to_draft"
+            ],
+            "title": "Action"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "Transition"
+      },
+      "app__api__v1__admin_models__Transition": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "publish",
+              "unpublish"
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "Transition"
       }
     },
     "securitySchemes": {
@@ -4195,6 +5302,10 @@
     {
       "name": "ops",
       "description": "Liveness / readiness"
+    },
+    {
+      "name": "Models",
+      "description": "On-device scan models: manifest and downloads"
     },
     {
       "name": "AI",

@@ -82,6 +82,14 @@ INDEXES: dict[str, list[IndexModel]] = {
     ],
     "directory_contacts": [IndexModel([("created_at", DESCENDING)])],
     "content_releases": [IndexModel([("release_no", ASCENDING)], unique=True)],
+    "model_versions": [
+        IndexModel(
+            [("entry.model_id", ASCENDING), ("entry.version", ASCENDING)],
+            name="model_version_unique",
+            unique=True,
+        ),
+        IndexModel([("status", ASCENDING), ("entry.plant_part", ASCENDING)]),
+    ],
     "mutation_receipts": [
         IndexModel([("user_id", ASCENDING), ("mutation_id", ASCENDING)], unique=True)
     ],

@@ -24,10 +24,12 @@ class ObjectInfo:
 
 class ObjectStore(Protocol):
     async def presign_put(self, key: str, mime_type: str) -> str: ...
-    async def presign_get(self, key: str) -> str: ...
+    async def presign_get(self, key: str, ttl_s: int | None = None) -> str: ...
     async def stat(self, key: str) -> ObjectInfo | None:
         """Size and sha256 of the stored bytes; None when the object does not exist."""
         ...
+
+    async def delete(self, key: str) -> None: ...
 
 
 class S3Store:
@@ -66,10 +68,22 @@ class S3Store:
             ExpiresIn=self._ttl,
         )
 
-    async def presign_get(self, key: str) -> str:
+    async def presign_get(self, key: str, ttl_s: int | None = None) -> str:
         return self._public.generate_presigned_url(  # type: ignore[no-any-return]
-            "get_object", Params={"Bucket": self._bucket, "Key": key}, ExpiresIn=self._ttl
+            "get_object",
+            Params={"Bucket": self._bucket, "Key": key},
+            ExpiresIn=ttl_s or self._ttl,
         )
+
+    async def upload_file(self, key: str, path: str) -> None:
+        """Server-side upload of a local file (operator scripts; phones use presigned PUTs)."""
+        await asyncio.to_thread(self._internal.upload_file, path, self._bucket, key)
+
+    async def delete(self, key: str) -> None:
+        try:
+            await asyncio.to_thread(self._internal.delete_object, Bucket=self._bucket, Key=key)
+        except (BotoCoreError, ClientError) as e:
+            raise StorageError(str(e)) from e
 
     async def stat(self, key: str) -> ObjectInfo | None:
         def run() -> ObjectInfo | None:

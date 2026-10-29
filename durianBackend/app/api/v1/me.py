@@ -24,6 +24,7 @@ _OWNED = {
     "self_checks": "owner_id",
     "mutation_receipts": "user_id",
     "chat_reports": "user_id",
+    "push_tokens": "user_id",
     "sessions": "user_id",
     "admin_members": "user_id",
     "admin_credentials": "user_id",
@@ -76,6 +77,37 @@ async def set_ai_consent(
         {"_id": user.id}, {"$set": {"ai_consent_version": body.version, "ai_consented_at": at}}
     )
     return store.preferences_wire(await _user(db, user))
+
+
+class PushTokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=1, max_length=200)
+    platform: Literal["ios", "android"]
+
+
+@router.put("/v1/me/push-token", operation_id="setPushToken")
+async def set_push_token(
+    body: PushTokenRequest,
+    user: Annotated[CurrentUser, Depends(current_user)],
+    db: Annotated[AsyncDatabase, Depends(get_database)],  # type: ignore[type-arg]
+) -> dict[str, Any]:
+    """Where to tell this phone that a new scan model is out. One phone token, one owner."""
+    await db["push_tokens"].update_one(
+        {"_id": body.token},
+        {"$set": {"user_id": user.id, "platform": body.platform, "updated_at": utcnow_ms()}},
+        upsert=True,
+    )
+    return {"status": "registered"}
+
+
+@router.delete("/v1/me/push-token", operation_id="deletePushToken")
+async def delete_push_token(
+    token: str,
+    user: Annotated[CurrentUser, Depends(current_user)],
+    db: Annotated[AsyncDatabase, Depends(get_database)],  # type: ignore[type-arg]
+) -> dict[str, Any]:
+    await db["push_tokens"].delete_one({"_id": token, "user_id": user.id})
+    return {"status": "removed"}
 
 
 @router.delete("/v1/me", operation_id="deleteAccount")

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from app.api.errors import install_error_handlers
 from app.api.middleware import RequestContextMiddleware
-from app.api.v1 import admin, auth, chat, content, health, me, media, sync
+from app.api.v1 import admin, admin_models, auth, chat, content, health, me, media, models, sync
 from app.auth.providers import ProviderVerifier, Verifier
 from app.config import Settings, get_settings
 from app.content.migrate import migrate_single_locale
@@ -16,6 +16,7 @@ from app.llm.base import Embedder, LlmClient
 from app.llm.factory import build_embedder, build_llm
 from app.media.storage import ObjectStore, S3Store
 from app.rag.store import Retriever, VectorRetriever, VectorStore, make_vector_store
+from app.scan_models.push import ExpoPushSender, PushSender
 
 
 def create_app(
@@ -28,6 +29,7 @@ def create_app(
     retriever: Retriever | None = None,
     vector_store: VectorStore | None = None,
     storage: ObjectStore | None = None,
+    push_sender: PushSender | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
 
@@ -46,6 +48,7 @@ def create_app(
             VectorRetriever(app.state.vectors, emb) if emb is not None else None
         )
         app.state.storage = storage or S3Store(settings)
+        app.state.push_sender = push_sender or ExpoPushSender()
         if bootstrap_indexes:
             try:
                 await ensure_indexes(app.state.db)
@@ -76,6 +79,7 @@ def create_app(
             {"name": "Identity", "description": "Sign-in, profile, preferences, account deletion"},
             {"name": "Admin", "description": "Requires an admin_members row"},
             {"name": "ops", "description": "Liveness / readiness"},
+            {"name": "Models", "description": "On-device scan models: manifest and downloads"},
             {"name": "AI", "description": "Grounded chat (consent required) and answer reports"},
             {"name": "Household data", "description": "Push mutations, pull snapshot"},
         ],
@@ -87,7 +91,9 @@ def create_app(
     app.include_router(me.router)
     app.include_router(me.admin_router)
     app.include_router(admin.router)
+    app.include_router(admin_models.router)
     app.include_router(content.router)
+    app.include_router(models.router)
     app.include_router(sync.router)
     app.include_router(media.router)
     app.include_router(chat.router)
