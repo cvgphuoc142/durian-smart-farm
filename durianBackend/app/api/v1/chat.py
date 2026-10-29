@@ -38,6 +38,7 @@ class Citation(BaseModel):
     version_id: UUID
     version_no: int = Field(ge=1)
     title: str
+    source_links: list[str] = []
 
 
 class ChatReportRequest(BaseModel):
@@ -71,7 +72,7 @@ async def chat(body: ChatRequest, request: Request, user: User, db: Db) -> dict[
         "answer_locale": reply.answer_locale,
         "status": reply.status,
         "context_as_of": reply.context_as_of,
-        "citations": reply.citations,
+        "citations": await rag_chat.with_source_links(db, reply.citations),
     }
 
 

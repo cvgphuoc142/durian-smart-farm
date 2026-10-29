@@ -83,6 +83,7 @@ def test_grounded_answer_cites_source(ctx: tuple[TestClient, FakeRetriever, Fake
     body = r.json()
     assert body["status"] == "answered" and body["context_as_of"] is None
     assert body["citations"][0]["version_id"] == VID
+    assert body["citations"][0]["source_links"] == []  # version not in this empty test DB
 
 
 def test_low_score_is_insufficient_without_llm_call(

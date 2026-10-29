@@ -75,7 +75,7 @@ Behaviours worth checking through `/v1/sync`:
 
 ## Seed data
 
-The seed ([scripts/seed.py](scripts/seed.py)) goes through the real sync engine, so the rules and receipts apply to it. It creates one farm, 3 plots, 3 seasons, 3 care logs with inputs, 3 expenses (one linked to a care log) and 2 sales with 3 payments. It also deletes one plot, so the snapshot shows a tombstone.
+The seed ([scripts/seed.py](scripts/seed.py)) goes through the real sync engine, so the rules and receipts apply to it. With no flags it publishes the knowledge a fresh install needs (14 articles, the CN and EU checklists, 6 contacts; every link checked). `--household` also creates the dev demo user's farm, 3 plots, 3 seasons, care logs, expenses and sales, and deletes one plot so the snapshot shows a tombstone.
 
 ## How to review it
 
@@ -106,3 +106,13 @@ The seed ([scripts/seed.py](scripts/seed.py)) goes through the real sync engine,
 
 - `APP_ENV` defaults to `prod`. `.env` sets `dev`, which enables the `dev:` tokens. Never set `dev` on a deployed server.
 - The Mongo URI uses `directConnection=true` and no `replicaSet` name. The compose file starts `mongo:7` as replica set `rs0` and initiates it from its healthcheck.
+
+## Scan models
+
+The phone does not bundle the disease models; it downloads them.
+
+- `GET /v1/models/manifest` (signed in): the published model of every body part, each with its sha256, size, labels, `release_notes`, `maturity`, `supports_healthy`, `limitations` and `min_app_version`. Empty `entries` until something is published.
+- `GET /v1/models/{model_id}/{version}/download`: a presigned link (valid `MODEL_URL_TTL_S`, default 1 h) to the file of a published version.
+- `/v1/admin/models` (admin): create a draft (the entry plus the file's sha256 and size), `PUT` the file to the returned `upload_url`, `complete` (the server re-reads it and compares size and hash), then `transition` `publish` or `unpublish`. Publishing replaces the live version of the same body part; publishing an older version again is the rollback. `PATCH` changes only the notes, beta flag, limits and minimum app version.
+- `uv run python -m scripts.publish_models <manifest.json> --files <dir> --publish` does the same from the command line.
+- `PUT /v1/me/push-token` registers an Expo push token; publishing sends "Có mô hình mới cho …" to every registered phone (best effort, never blocks the publish).

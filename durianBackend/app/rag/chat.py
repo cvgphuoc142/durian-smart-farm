@@ -55,6 +55,18 @@ def _citation(h: Hit) -> dict[str, Any]:
     }
 
 
+async def with_source_links(
+    db: AsyncDatabase,  # type: ignore[type-arg]
+    citations: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Adds the cited version's `source_links` (the original documents). Read from the version
+    itself, so the article schema and the vector payload stay as they are."""
+    ids = [UUID(c["version_id"]) for c in citations]
+    rows = db["article_versions"].find({"_id": {"$in": ids}}, {"source_links": 1})
+    links = {str(r["_id"]): r.get("source_links") or [] async for r in rows}
+    return [c | {"source_links": links.get(str(c["version_id"]), [])} for c in citations]
+
+
 def _dedupe(hits: list[Hit]) -> list[Hit]:
     seen: set[str] = set()
     out = []
