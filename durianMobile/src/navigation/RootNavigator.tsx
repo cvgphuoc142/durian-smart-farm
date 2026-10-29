@@ -22,6 +22,7 @@ import {
   SaveScan,
   Scan,
   ScanResult,
+  Models,
   ScanSync,
   Settings,
   SignIn,
@@ -79,6 +80,7 @@ export function RootNavigator() {
             <Stack.Screen name="ScanResult" component={ScanResult} />
             <Stack.Screen name="SaveScan" component={SaveScan} />
             <Stack.Screen name="Cases" component={Cases} />
+            <Stack.Screen name="Models" component={Models} />
             <Stack.Screen name="CaseDetail" component={CaseDetail} />
 
             <Stack.Screen name="Article" component={Article} />

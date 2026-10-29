@@ -1,4 +1,4 @@
-import { forwardRef, useState } from 'react';
+import { forwardRef, useState, type ReactNode } from 'react';
 import {
   StyleSheet,
   TextInput as RNTextInput,
@@ -17,10 +17,12 @@ export interface TextInputProps extends RNTextInputProps {
   error?: boolean;
   /** Unit or suffix shown inside the field, e.g. "ha", "₫". */
   suffix?: string;
+  /** A control inside the field's right edge, e.g. a send button. */
+  trailing?: ReactNode;
 }
 
 export const TextInput = forwardRef<RNTextInput, TextInputProps>(function TextInput(
-  { variant = 'default', error = false, suffix, multiline, style, onFocus, onBlur, ...rest },
+  { variant = 'default', error = false, suffix, trailing, multiline, style, onFocus, onBlur, ...rest },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
@@ -57,6 +59,7 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function TextIn
           {suffix}
         </Text>
       ) : null}
+      {trailing}
     </View>
   );
 });

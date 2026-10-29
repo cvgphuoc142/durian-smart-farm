@@ -17,7 +17,13 @@ import {
   Skeleton,
   Text,
 } from '@/components/ui';
-import { useLocalScan, usePartLabel, useRelatedArticles, useRunContext } from '@/hooks';
+import {
+  useLocalScan,
+  usePartLabel,
+  useRelatedArticles,
+  useRunContext,
+  useScanEntry,
+} from '@/hooks';
 import { useAppNavigation } from '@/navigation';
 import type { RootStackParamList } from '@/navigation/types';
 import { discardScan, rerunDraft } from '@/sync';
@@ -35,6 +41,7 @@ export function ScanResult() {
   const ctx = useRunContext();
   const part = usePartLabel();
   const related = useRelatedArticles(scan?.disease_code ?? null, scan?.plant_part ?? '');
+  const model = useScanEntry(scan?.plant_part, scan?.inference);
   const [busy, setBusy] = useState(false);
 
   const header = (
@@ -109,23 +116,12 @@ export function ScanResult() {
         <ScanResultCard
           state={scan.outcome}
           label={scan.label_snapshot}
-          score={scan.score}
+          predictions={scan.predictions}
           errorCode={scan.error_code}
         />
-        <KeyValueGrid
-          items={[
-            { label: t('result.part'), value: part(scan.plant_part) },
-            ...(scan.inference
-              ? [
-                  {
-                    label: t('result.score'),
-                    value:
-                      scan.score != null ? `${Math.round(scan.score * 100)}%` : t('common.unknown'),
-                  },
-                ]
-              : []),
-          ]}
-        />
+        <KeyValueGrid items={[{ label: t('result.part'), value: part(scan.plant_part) }]} />
+        {model?.maturity === 'beta' ? <Badge label={t('models.beta')} tone="warning" /> : null}
+        {model?.limitations ? <InfoBanner tone="warning" text={model.limitations} /> : null}
         {scan.inference ? (
           <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
             <Text variant="caption" color="textMuted" style={{ flex: 1 }}>
@@ -160,6 +156,20 @@ export function ScanResult() {
             )}
           </View>
         )}
+
+        <Button
+          variant="outline"
+          icon="chat"
+          label={t('result.askAssistant')}
+          onPress={() =>
+            nav.navigate('Chatbot', {
+              caseId: scan.new_case?.id ?? scan.case_id ?? undefined,
+              prefill: t(scan.label_snapshot ? 'result.askPrefill' : 'result.askPrefillNoLabel', {
+                label: scan.label_snapshot,
+              }),
+            })
+          }
+        />
 
         <InfoBanner tone="info" text={t('result.disclaimer')} />
       </View>

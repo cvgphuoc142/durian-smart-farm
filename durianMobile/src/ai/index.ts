@@ -2,9 +2,15 @@ import type { InferenceEngine } from './router';
 import { stubEngine, STUB_MODEL_ID } from './stub';
 
 export * from './decode';
+export * from './labels';
 export * from './manifest';
+export * from './modelInstaller';
+export * from './modelStore';
+export * from './modelSync';
 export * from './router';
-export { loadManifest, STUB_ENABLED, STUB_MODEL_ID } from './stub';
+export * from './updates';
+export { isOnCellular } from './modelFiles';
+export { STUB_ENABLED, STUB_MODEL_ID, withStubs } from './stub';
 
 /**
  * The stub model only answers for its own entries; everything else goes to ONNX Runtime, which is

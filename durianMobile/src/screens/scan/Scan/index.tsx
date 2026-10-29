@@ -5,7 +5,8 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Linking, StyleSheet, View } from 'react-native';
 
-import { STUB_ENABLED } from '@/ai';
+import { recognizedLabels, STUB_ENABLED } from '@/ai';
+import { ModelUpdateBanners } from '@/components/domain/ModelUpdateBanner';
 import {
   ChipSelect,
   EmptyState,
@@ -43,9 +44,14 @@ export function Scan() {
   const camera = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [picked, setPicked] = useState<Picked | null>(null);
-  const [part, setPart] = useState<string | null>(
-    entries.length === 1 ? entries[0].plant_part : null,
-  );
+  const [chosen, setPart] = useState<string | null>(null);
+  // A single body part needs no choosing; entries change when a model is downloaded.
+  const part =
+    chosen && entries.some((e) => e.plant_part === chosen)
+      ? chosen
+      : entries.length === 1
+        ? entries[0].plant_part
+        : null;
   const [running, setRunning] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
 
@@ -91,6 +97,7 @@ export function Scan() {
   };
 
   const noModel = entries.length === 0;
+  const selected = entries.find((e) => e.plant_part === part) ?? null;
 
   return (
     <Screen
@@ -123,6 +130,7 @@ export function Scan() {
       contentStyle={{ paddingHorizontal: spacing.gutter, gap: spacing.lg }}
     >
       <View testID="screen-Scan" style={{ gap: spacing.lg }}>
+        <ModelUpdateBanners />
         {stubbed ? <InfoBanner tone="warning" text={t('scan.stub')} /> : null}
         {drafts > 0 ? <InfoBanner tone="info" text={t('scan.drafts', { count: drafts })} /> : null}
         {drafts > 0 ? (
@@ -135,7 +143,13 @@ export function Scan() {
         ) : null}
 
         {noModel ? (
-          <EmptyState icon="scan" title={t('scan.noModelTitle')} body={t('scan.noModelBody')} />
+          <EmptyState
+            icon="scan"
+            title={t('scan.noModelTitle')}
+            body={t('scan.noModelBody')}
+            actionLabel={t('scan.getModels')}
+            onAction={() => nav.navigate('Models')}
+          />
         ) : (
           <>
             <View style={styles.frame}>
@@ -216,10 +230,19 @@ export function Scan() {
             <View style={{ gap: spacing.sm }}>
               <Text variant="bodyStrong">{t('scan.part')}</Text>
               <ChipSelect
-                options={entries.map((e) => ({ id: e.plant_part, label: e.part_labels[locale] }))}
+                options={entries.map((e) => ({
+                  id: e.plant_part,
+                  label: e.part_labels[locale],
+                  caption: e.maturity === 'beta' ? t('models.beta') : undefined,
+                }))}
                 value={part}
                 onChange={setPart}
               />
+              {selected ? (
+                <Text variant="secondary" color="textSoft">
+                  {t('scan.recognizes', { labels: recognizedLabels(selected, locale).join(', ') })}
+                </Text>
+              ) : null}
               <Text variant="caption" color="textMuted">
                 {t('scan.partHint')}
               </Text>

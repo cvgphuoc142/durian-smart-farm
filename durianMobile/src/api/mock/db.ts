@@ -33,6 +33,8 @@ function create() {
     receipts: new Map<string, Receipt>(),
     /** The content release the "server" has published; raise it to simulate a new publish. */
     contentRelease: 1,
+    /** The scan models the "server" has published (manifest entries). Empty by default. */
+    models: [] as unknown[],
     /** Test hooks. */
     sim: {
       /** The release download fails while the manifest still answers (a broken download). */

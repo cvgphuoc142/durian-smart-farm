@@ -2,13 +2,14 @@ import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { engine, loadManifest, type ModelEntry } from '@/ai';
+import { engine, type ModelEntry } from '@/ai';
 import { syncApi } from '@/api';
 import { onScanChange, readRefs, refsFromSnapshot, scanRepo, writeRefs, type ScanRefs } from '@/db';
 import { useAuthStore } from '@/stores/authStore';
 import type { RunContext } from '@/sync';
 import type { Locale, LocalScan, Snapshot } from '@/types';
 
+import { useScanModels } from './models';
 import { qk, useUserId } from './queryKeys';
 
 /** Re-reads a local table whenever a scan changes (save, sync step, discard). */
@@ -64,11 +65,6 @@ export function useLocalScan(id: string) {
 /** For the sign-out warning (FR-X10). */
 export function useUnsyncedScanCount() {
   return useLocal(scanRepo.countUnsynced, 0).data;
-}
-
-/** The model entries the app can run: complete pipelines only (FR-B02). */
-export function useScanModels() {
-  return useMemo(() => loadManifest(), []);
 }
 
 /** What the scan flow needs to run a model for the signed-in account in the UI language. */

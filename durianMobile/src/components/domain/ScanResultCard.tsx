@@ -2,8 +2,9 @@ import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
 import { Badge, Card, Icon, Text, type IconName } from '@/components/ui';
+import { useDiseases } from '@/hooks';
 import { spacing, tones, type Tone } from '@/theme';
-import type { ScanResultState } from '@/types';
+import type { Locale, Prediction, ScanResultState } from '@/types';
 
 const look: Record<
   ScanResultState,
@@ -16,22 +17,30 @@ const look: Record<
 };
 
 /**
- * The four answers of a scan (FR-B04). "Suspected" is worded as a suspicion and the score is the
- * model's score, never a probability of disease. Nothing here suggests a product or a shop.
+ * The four answers of a scan (FR-B04). "Suspected" is worded as a suspicion and the percentages are
+ * the model's own prediction rates, never a probability of disease. Nothing here suggests a product or a shop.
  */
 export function ScanResultCard({
   state,
   label,
-  score,
+  predictions,
   errorCode,
 }: {
   state: ScanResultState;
   label: string | null;
-  score: number | null;
+  predictions: Prediction[];
   errorCode?: string | null;
 }) {
   const { t, i18n } = useTranslation();
   const { tone, icon, card } = look[state];
+  const diseases = useDiseases();
+  const locale = (i18n.language === 'en' ? 'en' : 'vi') as Locale;
+  const nameOf = (code: string | null) => {
+    if (!code) return t('result.notDisease');
+    const d = diseases.find((x) => x.code === code);
+    return d?.names[locale] ?? d?.names.vi ?? d?.names.en ?? code;
+  };
+  const shown = state === 'error' ? [] : predictions.slice(0, 3);
   const title =
     state === 'suspected'
       ? label
@@ -55,9 +64,26 @@ export function ScanResultCard({
         <Text variant="secondary" color="textMuted">
           {body}
         </Text>
-        {score != null && (state === 'suspected' || state === 'healthy') ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <Badge label={`${t('result.score')}: ${Math.round(score * 100)}%`} tone={tone} />
+        {shown.length > 0 ? (
+          <View style={{ gap: spacing.xs }}>
+            <Text variant="caption" color="textMuted">
+              {t('result.score')}
+            </Text>
+            <View
+              testID="prediction-list"
+              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}
+            >
+              {shown.map((p, i) => (
+                <Badge
+                  key={`${p.disease_code ?? 'none'}-${i}`}
+                  label={`${nameOf(p.disease_code)} ${Math.round(p.score * 100)}%`}
+                  tone={i === 0 ? tone : 'neutral'}
+                />
+              ))}
+            </View>
+            <Text variant="caption" color="textMuted">
+              {t('result.scoreHint')}
+            </Text>
           </View>
         ) : null}
       </View>

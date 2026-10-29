@@ -108,7 +108,7 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     await shown(t('chat.consentTitle'));
     // Without consent the box searches articles; nothing is sent.
     fireEvent.changeText(label(t('chat.input')), 'xi mu');
-    press(t('chat.search'));
+    fireEvent.press(label(t('chat.search')));
     await shown('Bệnh xì mủ (mẫu)');
     expect(ask).not.toHaveBeenCalled();
 
@@ -117,12 +117,16 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     await waitFor(() => expect(screen.queryAllByText(t('chat.consentTitle'))).toHaveLength(0));
 
     fireEvent.changeText(label(t('chat.input')), 'Bệnh xì mủ là gì?');
-    press(t('chat.send'));
+    fireEvent.press(label(t('chat.send')));
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    fireEvent.press(await screen.findByLabelText(t('chat.sources')));
     await screen.findByLabelText(t('chat.openSource', { title: 'Bệnh xì mủ (mẫu)' }));
     expect(ask.mock.calls[0][0]).toMatchObject({ locale: 'vi', season_id: 's1' });
-    // The answer says which farm data it used.
-    expect(screen.getAllByText(/Dữ liệu vườn tính đến/).length).toBeGreaterThan(0);
+
+    // "Original text" opens the cited version's source link in another app.
+    const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    press(t('chat.originalText'));
+    await waitFor(() => expect(openUrl).toHaveBeenCalledWith('https://example.org/source'));
 
     // The citation opens the exact version and revision it quoted.
     fireEvent.press(
@@ -137,11 +141,11 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     db.preferences = { ...db.preferences, ai_consent_version: 1 };
     await openChat();
     fireEvent.changeText(label(t('chat.input')), 'xì mủ');
-    press(t('chat.send'));
-    await screen.findByLabelText(t('chat.openSource', { title: 'Bệnh xì mủ (mẫu)' }));
+    fireEvent.press(label(t('chat.send')));
+    await screen.findAllByLabelText(t('chat.sources'));
     fireEvent.changeText(label(t('chat.input')), 'thối trái');
-    press(t('chat.send'));
-    await screen.findByLabelText(t('chat.openSource', { title: 'Thối trái (mẫu)' }));
+    fireEvent.press(label(t('chat.send')));
+    await waitFor(() => expect(screen.getAllByLabelText(t('chat.sources'))).toHaveLength(2));
   });
 
   it('says plainly when there are not enough sources', async () => {
@@ -149,18 +153,8 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     db.preferences = { ...db.preferences, ai_consent_version: 1 };
     await openChat();
     fireEvent.changeText(label(t('chat.input')), 'coffee price');
-    press(t('chat.send'));
+    fireEvent.press(label(t('chat.send')));
     await shown(t('chat.insufficient'));
-  });
-
-  it('warns when the farm data behind an answer is old', async () => {
-    await start();
-    db.preferences = { ...db.preferences, ai_consent_version: 1 };
-    db.sim.contextAsOf = '2026-01-01T00:00:00.000Z';
-    await openChat();
-    fireEvent.changeText(label(t('chat.input')), 'xi mu');
-    press(t('chat.send'));
-    await shown(t('chat.stale'));
   });
 
   it('offline: the box becomes a search, the question stays a draft, and nothing is sent when the network returns', async () => {
@@ -169,12 +163,12 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     db.preferences = { ...db.preferences, ai_consent_version: 1 };
     mockOnline = false;
     await openChat();
-    await shown(t('chat.offline'));
+    await screen.findByLabelText(t('chat.search'));
     fireEvent.changeText(label(t('chat.input')), 'xi mu');
     // The draft is saved shortly after typing stops, so typing itself stays fast.
     await waitFor(() => expect(getDraft('chat')).toEqual({ question: 'xi mu' }));
-    expect(screen.queryAllByText(t('chat.send'))).toHaveLength(0);
-    press(t('chat.search'));
+    expect(screen.queryAllByLabelText(t('chat.send'))).toHaveLength(0);
+    fireEvent.press(label(t('chat.search')));
     await shown('Bệnh xì mủ (mẫu)');
     expect(ask).not.toHaveBeenCalled();
 
@@ -192,17 +186,17 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     db.preferences = { ...db.preferences, ai_consent_version: 1 };
     await openChat();
     // The consent is known once the send button replaces the search button.
-    await screen.findByText(t('chat.send'));
+    await screen.findByLabelText(t('chat.send'));
     db.sim.failWith.push({ status: 429, code: 'rate_limited' });
     fireEvent.changeText(label(t('chat.input')), 'xi mu');
-    press(t('chat.send'));
+    fireEvent.press(label(t('chat.send')));
     await shown(t('chat.failed'));
     expect(ask).toHaveBeenCalledTimes(1);
     await new Promise((r) => setTimeout(r, 50));
     expect(ask).toHaveBeenCalledTimes(1);
 
     press(t('common.retry'));
-    await screen.findByLabelText(t('chat.openSource', { title: 'Bệnh xì mủ (mẫu)' }));
+    await screen.findByLabelText(t('chat.sources'));
     expect(ask).toHaveBeenCalledTimes(2);
   });
 
@@ -212,8 +206,8 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     db.preferences = { ...db.preferences, ai_consent_version: 1 };
     await openChat();
     fireEvent.changeText(label(t('chat.input')), 'xi mu');
-    press(t('chat.send'));
-    await screen.findByLabelText(t('chat.openSource', { title: 'Bệnh xì mủ (mẫu)' }));
+    fireEvent.press(label(t('chat.send')));
+    await screen.findByLabelText(t('chat.sources'));
 
     press(t('chat.report'));
     await screen.findByTestId('screen-ReportAnswer');

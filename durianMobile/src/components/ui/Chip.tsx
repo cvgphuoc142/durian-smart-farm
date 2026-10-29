@@ -16,6 +16,8 @@ export interface ChipProps {
   count?: number;
   /** 44 high instead of 40. */
   large?: boolean;
+  /** Small second line under the label, e.g. "Mô hình đang hoàn thiện". */
+  caption?: string;
 }
 
 export function Chip({
@@ -26,6 +28,7 @@ export function Chip({
   icon,
   count,
   large = false,
+  caption,
 }: ChipProps) {
   const fill = tone === 'ink' ? colors.ink : colors.primary;
   const fg = selected ? colors.white : colors.textSoft;
@@ -36,15 +39,28 @@ export function Chip({
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
-        { height: large ? sizes.touchTarget : sizes.chip },
+        caption
+          ? { minHeight: sizes.touchTarget, paddingVertical: 6 }
+          : { height: large ? sizes.touchTarget : sizes.chip },
         selected ? { backgroundColor: fill, borderColor: fill } : styles.off,
         pressed && styles.pressed,
       ]}
     >
       {icon ? <Icon name={icon} size={16} color={fg} /> : null}
-      <Text variant="label" color={fg}>
-        {label}
-      </Text>
+      {caption ? (
+        <View>
+          <Text variant="label" color={fg}>
+            {label}
+          </Text>
+          <Text variant="caption" color={selected ? colors.primaryOnDark : 'textMuted'}>
+            {caption}
+          </Text>
+        </View>
+      ) : (
+        <Text variant="label" color={fg}>
+          {label}
+        </Text>
+      )}
       {count != null ? (
         <Text variant="label" color={selected ? colors.primaryOnDark : 'iconMuted'}>
           {count}

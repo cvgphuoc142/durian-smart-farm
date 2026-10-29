@@ -5,6 +5,8 @@ export interface Citation {
   version_id: string;
   version_no: number;
   title: string;
+  /** The original documents of the cited version; empty when it has none. */
+  source_links: string[];
 }
 
 export type ChatAnswerStatus = 'answered' | 'insufficient_sources';

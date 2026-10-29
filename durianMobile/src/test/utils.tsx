@@ -3,6 +3,7 @@ import { render } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useModelStore, useModelTransfer } from '@/ai';
 import { resetMockDb } from '@/api';
 import { ToastProvider } from '@/components/ui';
 import { useAuthStore, useContextStore, useDraftStore } from '@/stores';
@@ -24,6 +25,8 @@ export const TEST_USER = { id: 'test-user', provider: 'google' as const, display
 export function resetApp({ signedIn = true }: { signedIn?: boolean } = {}) {
   resetMockDb();
   useDraftStore.setState({ drafts: {} });
+  useModelStore.setState({ installed: {}, remote: null });
+  useModelTransfer.setState({ active: null, queue: [], errors: {} });
   useContextStore.setState({ byUser: {} });
   useAuthStore.setState({
     hydrated: true,

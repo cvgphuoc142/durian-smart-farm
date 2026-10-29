@@ -138,6 +138,35 @@ const routes: [method: string, pattern: RegExp, handler: Handler][] = [
   ],
 
   [
+    'get',
+    /^\/v1\/models\/manifest$/,
+    () => ({
+      schema_version: 1,
+      revision: JSON.stringify(db.models).length.toString(),
+      published_at: null,
+      entries: db.models,
+    }),
+  ],
+  [
+    'get',
+    /^\/v1\/models\/([^/]+)\/([^/]+)\/download$/,
+    ({ params }) => {
+      const entry = (db.models as { model_id: string; version: string; artifact: any }[]).find(
+        (m) => m.model_id === params[0] && m.version === params[1],
+      );
+      if (!entry) throw new MockHttpError(404, 'not_found');
+      return {
+        url: `mock://model/${params[0]}/${params[1]}`,
+        expires_at: db.clock(),
+        sha256: entry.artifact.sha256,
+        size_bytes: entry.artifact.size_bytes,
+        path: entry.artifact.path,
+      };
+    },
+  ],
+  ['put', /^\/v1\/me\/push-token$/, () => ({ status: 'registered' })],
+  ['delete', /^\/v1\/me\/push-token$/, () => ({ status: 'removed' })],
+  [
     'post',
     /^\/v1\/chat$/,
     ({ body }): ChatResponse => {

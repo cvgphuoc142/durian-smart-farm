@@ -1,6 +1,7 @@
+import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ArticleCard, CitationChip } from '@/components/domain';
 import {
@@ -8,32 +9,25 @@ import {
   Button,
   Card,
   EmptyState,
+  Icon,
   Header,
-  InfoBanner,
   ListGroup,
   Screen,
   Text,
   TextInput,
   useToast,
 } from '@/components/ui';
-import {
-  useAiConsent,
-  useApiErrorMessage,
-  useArticleList,
-  useAsk,
-  useFormat,
-  useSeasonLite,
-  useUnsyncedScanCount,
-} from '@/hooks';
+import { useAiConsent, useApiErrorMessage, useArticleList, useAsk } from '@/hooks';
+import type { RootStackParamList } from '@/navigation/types';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
+import { openExternal } from '@/services';
 import { useChatMessages } from '@/stores';
 import { getDraft, useDraftStore } from '@/stores/draftStore';
 import { colors, radius, spacing } from '@/theme';
-import type { ChatMessage } from '@/types';
+import type { Citation } from '@/types';
 
 const DRAFT_KEY = 'chat';
 /** A farm snapshot older than this is called out as possibly out of date (FR-C06). */
-const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /** Typing must not wait on a persisted-store write: a slow keystroke breaks Vietnamese Telex/VNI. */
 const DRAFT_SAVE_DELAY_MS = 500;
@@ -52,17 +46,22 @@ const saveDraft = (question: string) => {
  */
 export function Chatbot() {
   const { t } = useTranslation();
-  const f = useFormat();
   const nav = useAppNavigation();
+  // Set when opened from a scan result: the answer then draws on that case.
+  const params = useRoute<RouteProp<RootStackParamList, 'Chatbot'>>().params;
+  const caseId = params?.caseId;
   const toast = useToast();
+  const openOriginal = async (url: string) => {
+    if (!(await openExternal(url))) toast.show(t('content.cannotOpen'), 'error');
+  };
   const errorText = useApiErrorMessage();
   const messages = useChatMessages();
   const ask = useAsk();
   const consent = useAiConsent();
-  const { season, asOf } = useSeasonLite();
-  const unsynced = useUnsyncedScanCount();
 
-  const [question, setQuestion] = useState(() => String(getDraft(DRAFT_KEY)?.question ?? ''));
+  const [question, setQuestion] = useState(
+    () => params?.prefill ?? String(getDraft(DRAFT_KEY)?.question ?? ''),
+  );
   const [pending, setPending] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ question: string; message: string } | null>(null);
   const [searched, setSearched] = useState('');
@@ -74,6 +73,13 @@ export function Chatbot() {
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const latest = useRef(question);
   latest.current = question;
+
+  // The screen can be reused with new params, so a prefilled question is applied on every change.
+  useEffect(() => {
+    if (!params?.prefill) return;
+    setQuestion(params.prefill);
+    latest.current = params.prefill;
+  }, [params?.prefill]);
 
   // Show the newest message: the question just sent, then its answer or the failure card.
   useEffect(() => {
@@ -119,7 +125,7 @@ export function Chatbot() {
     latest.current = '';
     saveDraft('');
     try {
-      const reply = await ask.send(q);
+      const reply = await ask.send(q, caseId);
       if (!reply) restore(q);
     } catch (e) {
       restore(q);
@@ -139,50 +145,45 @@ export function Chatbot() {
     }
   };
 
-  const stale = (m: ChatMessage) => {
-    const at = m.response?.context_as_of;
-    if (!at) return true;
-    return Date.now() - new Date(at).getTime() > STALE_AFTER_MS;
-  };
-
   return (
     <Screen
       scrollRef={scroller}
       header={<Header title={t('screens.Chatbot')} variant="back" onBack={() => nav.goBack()} />}
       footer={
-        <View style={{ gap: spacing.sm }}>
-          <TextInput
-            value={question}
-            onChangeText={change}
-            placeholder={t(canAsk ? 'chat.placeholder' : 'chat.searchPlaceholder')}
-            accessibilityLabel={t('chat.input')}
-            multiline
-            autoCorrect={false}
-          />
-          {canAsk ? (
-            <Button
-              icon="send"
-              label={t('chat.send')}
-              loading={ask.isPending}
-              disabled={question.trim() === ''}
-              onPress={() => void send(question)}
-            />
-          ) : (
-            <Button
-              icon="search"
-              label={t('chat.search')}
-              disabled={question.trim() === ''}
-              onPress={() => setSearched(question)}
-            />
-          )}
-        </View>
+        <TextInput
+          value={question}
+          onChangeText={change}
+          placeholder={t(canAsk ? 'chat.placeholder' : 'chat.searchPlaceholder')}
+          accessibilityLabel={t('chat.input')}
+          multiline
+          autoCorrect={false}
+          style={styles.input}
+          trailing={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t(canAsk ? 'chat.send' : 'chat.search')}
+              accessibilityState={{ disabled: question.trim() === '' || ask.isPending }}
+              disabled={question.trim() === '' || ask.isPending}
+              onPress={() => (canAsk ? void send(question) : setSearched(question))}
+              style={({ pressed }) => [
+                styles.sendButton,
+                (question.trim() === '' || ask.isPending) && styles.sendDisabled,
+                pressed && styles.sendPressed,
+              ]}
+            >
+              {ask.isPending ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Icon name={canAsk ? 'send' : 'search'} size={20} color="white" />
+              )}
+            </Pressable>
+          }
+        />
       }
       contentStyle={{ paddingHorizontal: spacing.gutter, gap: spacing.md }}
     >
       <View testID="screen-Chatbot" style={{ gap: spacing.md }}>
-        {!ask.online ? (
-          <InfoBanner tone="warning" icon="wifiOff" text={t('chat.offline')} />
-        ) : ask.me.data && !consent.consented ? (
+        {ask.online && ask.me.data && !consent.consented ? (
           <Card variant="info">
             <View style={{ gap: spacing.sm }}>
               <Text variant="bodyStrong">{t('chat.consentTitle')}</Text>
@@ -201,15 +202,6 @@ export function Chatbot() {
               />
             </View>
           </Card>
-        ) : null}
-
-        {canAsk && season ? (
-          <Text variant="caption" color="textMuted">
-            {t('chat.context', { season: season.name })}
-          </Text>
-        ) : null}
-        {canAsk && unsynced > 0 ? (
-          <InfoBanner tone="warning" icon="cloud" text={t('chat.unsynced', { count: unsynced })} />
         ) : null}
 
         {messages.length === 0 && !pending && canAsk ? (
@@ -231,45 +223,27 @@ export function Chatbot() {
                 ) : null}
                 <Text variant="body">{m.text || t('chat.noAnswer')}</Text>
                 {m.response && m.response.citations.length > 0 ? (
-                  <View style={{ gap: spacing.sm }}>
-                    <Text variant="label" color="textMuted">
-                      {t('chat.sources')}
-                    </Text>
-                    {m.response.citations.map((c) => (
-                      <CitationChip
-                        key={`${c.article_id}-${c.version_id}`}
-                        citation={c}
-                        onPress={() =>
-                          nav.navigate('Article', {
-                            articleId: c.article_id,
-                            versionId: c.version_id,
-                          })
-                        }
-                      />
-                    ))}
-                  </View>
-                ) : null}
-                <Text variant="caption" color="textMuted">
-                  {m.response?.context_as_of
-                    ? t('chat.asOf', { at: f.dateTime(m.response.context_as_of) })
-                    : t('chat.noContext')}
-                </Text>
-                {m.response && (stale(m) || unsynced > 0) ? (
-                  <InfoBanner
-                    tone="warning"
-                    icon="clock"
-                    text={t(unsynced > 0 ? 'chat.unsynced' : 'chat.stale', { count: unsynced })}
+                  <Sources
+                    citations={m.response.citations}
+                    onOpen={(c) =>
+                      nav.navigate('Article', { articleId: c.article_id, versionId: c.version_id })
+                    }
+                    onOpenOriginal={(c) => void openOriginal(c.source_links[0])}
                   />
                 ) : null}
               </View>
-              <Button
-                size="md"
-                variant="outline"
-                icon="alert"
-                label={t('chat.report')}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('chat.report')}
+                hitSlop={8}
                 onPress={() => nav.navigate('ReportAnswer', { messageId: m.id })}
                 style={styles.report}
-              />
+              >
+                <Icon name="alert" size={14} color="textMuted" />
+                <Text variant="caption" color="textMuted">
+                  {t('chat.report')}
+                </Text>
+              </Pressable>
             </View>
           ),
         )}
@@ -325,10 +299,6 @@ export function Chatbot() {
             )}
           </View>
         ) : null}
-
-        <Text variant="caption" color="textMuted">
-          {asOf ? t('chat.syncedAt', { at: f.dateTime(asOf) }) : t('chat.neverSynced')}
-        </Text>
       </View>
     </Screen>
   );
@@ -343,5 +313,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  report: { alignSelf: 'flex-start' },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
+  input: { minHeight: 40, maxHeight: 120 },
+  sendButton: {
+    alignSelf: 'flex-end',
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  sendDisabled: { opacity: 0.4 },
+  sendPressed: { opacity: 0.7 },
+  report: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4 },
 });
+
+/** The sources of one answer, folded away until the farmer taps to see them. */
+function Sources({
+  citations,
+  onOpen,
+  onOpenOriginal,
+}: {
+  citations: Citation[];
+  onOpen: (c: Citation) => void;
+  onOpenOriginal: (c: Citation) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ gap: spacing.xs }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={t('chat.sources')}
+        hitSlop={8}
+        onPress={() => setOpen((v) => !v)}
+        style={styles.toggle}
+      >
+        <Text variant="caption" color="textMuted">
+          {`${t('chat.sources')} (${citations.length})`}
+        </Text>
+        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} color="textMuted" />
+      </Pressable>
+      {open
+        ? citations.map((c) => (
+            <CitationChip
+              key={`${c.article_id}-${c.version_id}`}
+              citation={c}
+              onPress={() => onOpen(c)}
+              onOpenOriginal={() => onOpenOriginal(c)}
+            />
+          ))
+        : null}
+    </View>
+  );
+}

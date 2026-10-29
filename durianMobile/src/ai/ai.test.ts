@@ -1,65 +1,109 @@
 import { entry } from '@/test/scanFixtures';
 
 import { decode, normalize, ScanRuntimeError } from './decode';
-import { parseManifest } from './manifest';
+import { recognizedLabels } from './labels';
+import { appTooOld, parseManifest } from './manifest';
 import { centerCrop, fitInside, letterbox, tensorDims, toTensorData } from './preprocess';
 import { runScan } from './router';
-import { _stubManifestForTest, loadManifest, stubEngine } from './stub';
-
-const has = (p: string) => p === 'leaf.onnx' || p === 'fruit.onnx';
+import { _stubManifestForTest, stubEngine, withStubs } from './stub';
 
 describe('manifest', () => {
   it('keeps complete entries and drops the rest, with the reason', () => {
-    const good = entry();
-    const result = parseManifest(
-      {
-        schema_version: 1,
-        entries: [
-          good,
-          {
-            ...entry({
-              plant_part: 'fruit',
-              artifact: { path: 'gone.onnx', sha256: 'c'.repeat(64) },
-            }),
-          },
-          entry({
-            plant_part: 'trunk',
-            classes: [
-              { index: 0, kind: 'healthy', disease_code: null, labels: {} },
-              { index: 1, kind: 'disease', disease_code: null, labels: {} },
-            ],
-          }),
-          entry({ plant_part: 'leaf' }),
-          { model_id: 'x', plant_part: 'root' },
-        ],
-      },
-      has,
-    );
+    const result = parseManifest({
+      schema_version: 1,
+      entries: [
+        entry(),
+        entry({
+          plant_part: 'trunk',
+          classes: [
+            { index: 0, kind: 'healthy', disease_code: null, labels: {} },
+            { index: 1, kind: 'disease', disease_code: null, labels: {} },
+          ],
+        }),
+        entry({ plant_part: 'leaf', version: '2.0.0' }),
+        entry({
+          plant_part: 'fruit',
+          artifact: { path: 'f.onnx', sha256: 'c'.repeat(64) } as never,
+        }),
+        { model_id: 'x', plant_part: 'root' },
+      ],
+    });
     expect(result.entries.map((e) => e.plant_part)).toEqual(['leaf']);
     expect(result.rejected.map((r) => r.reason)).toEqual(
-      expect.arrayContaining(['artifact_missing', 'duplicate_part']),
+      expect.arrayContaining(['duplicate_part']),
     );
     expect(result.rejected).toHaveLength(4);
   });
 
   it('an empty or broken manifest offers no body part', () => {
-    expect(parseManifest({ schema_version: 1, entries: [] }, has).entries).toEqual([]);
-    expect(parseManifest({ nope: true }, has).entries).toEqual([]);
+    expect(parseManifest({ schema_version: 1, entries: [] }).entries).toEqual([]);
+    expect(parseManifest({ nope: true }).entries).toEqual([]);
+    expect(parseManifest({ schema_version: 2, entries: [entry()] }).entries).toEqual([]);
   });
 
-  it('the bundled manifest lists leaf, stem and fruit, none of which claims to see a healthy plant', () => {
-    const { entries, rejected } = loadManifest({ stub: false });
-    expect(rejected).toEqual([]);
-    expect(entries.map((e) => e.plant_part)).toEqual(['leaf', 'stem', 'fruit']);
-    expect(entries.every((e) => e.classes.every((c) => c.kind === 'disease'))).toBe(true);
+  it('claims of the entry must agree with its classes', () => {
+    // A healthy class the entry denies, and a claim of "healthy" with no class for it.
+    const healthyClass = parseManifest({
+      schema_version: 1,
+      entries: [entry({ supports_healthy: false })],
+    });
+    expect(healthyClass.entries).toEqual([]);
+    const noClass = entry({
+      supports_healthy: true,
+      classes: [
+        { index: 0, kind: 'disease', disease_code: 'a', labels: {} },
+        { index: 1, kind: 'disease', disease_code: 'b', labels: {} },
+      ],
+    });
+    expect(parseManifest({ schema_version: 1, entries: [noClass] }).entries).toEqual([]);
   });
 
-  it('the dev stub entries are valid and only appear when asked for', () => {
+  it('keeps the optional texts and the beta flag the screens read', () => {
+    const [e] = parseManifest({
+      schema_version: 1,
+      entries: [entry({ maturity: 'beta', limitations: 'Chỉ cho lá', min_app_version: '1.2' })],
+    }).entries;
+    expect(e).toMatchObject({
+      maturity: 'beta',
+      limitations: 'Chỉ cho lá',
+      min_app_version: '1.2',
+    });
+  });
+
+  it('an app older than min_app_version is told so instead of running the entry', () => {
+    const [e] = parseManifest({
+      schema_version: 1,
+      entries: [entry({ min_app_version: '1.2.0' })],
+    }).entries;
+    expect(appTooOld(e, '1.1.9')).toBe(true);
+    expect(appTooOld(e, '1.2')).toBe(false);
+    expect(appTooOld(e, '1.10.0')).toBe(false);
+    expect(appTooOld(entry(), '0.0.1')).toBe(false);
+    const veto = parseManifest(
+      { schema_version: 1, entries: [entry({ min_app_version: '9.0' })] },
+      (x) => (appTooOld(x, '1.0.0') ? 'app_too_old' : null),
+    );
+    expect(veto.entries).toEqual([]);
+    expect(veto.rejected[0]).toMatchObject({ plant_part: 'leaf', reason: 'app_too_old' });
+  });
+
+  it('the dev stub entries are valid, only appear when asked for, and never replace a real model', () => {
     expect(_stubManifestForTest().entries).toHaveLength(1);
-    // The real model of a part wins over the stub, so with all three bundled no stub is added.
-    const parts = loadManifest({ stub: true }).entries.map((e) => e.plant_part);
-    expect(parts).toEqual(['leaf', 'stem', 'fruit']);
-    expect(loadManifest({ stub: true }).entries.some((e) => e.stub)).toBe(false);
+    const none = { entries: [], rejected: [] };
+    expect(withStubs(none, { stub: false }).entries).toEqual([]);
+    expect(withStubs(none, { stub: true }).entries.map((e) => e.plant_part)).toEqual([
+      'leaf',
+      'fruit',
+    ]);
+    const real = { entries: [entry({ plant_part: 'leaf' })], rejected: [] };
+    const merged = withStubs(real, { stub: true }).entries;
+    expect(merged.map((e) => e.plant_part)).toEqual(['leaf', 'fruit']);
+    expect(merged.find((e) => e.plant_part === 'leaf')?.stub).toBeUndefined();
+  });
+
+  it('lists what a model recognises from its classes and never "other"', () => {
+    expect(recognizedLabels(entry(), 'vi')).toEqual(['Khỏe', 'Thán thư']);
+    expect(recognizedLabels(entry(), 'en')).toEqual(['Healthy', 'Anthracnose']);
   });
 });
 

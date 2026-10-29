@@ -251,6 +251,7 @@ export function answerFromSamples(
       version_id: h.version_id,
       version_no: h.version_no,
       title: h.title,
+      source_links: h.source_links,
     })),
   };
 }

@@ -68,7 +68,8 @@
     "ContactDetail": "Contact",
     "Settings": "Settings",
     "ScanSync": "Scan sync",
-    "Account": "Account"
+    "Account": "Account",
+    "Models": "Scan models"
   },
   "context": {
     "title": "Choose farm, plot, season",
@@ -333,7 +334,7 @@
     "running": "Analysing on this phone…",
     "oneImage": "One photo per scan.",
     "noModelTitle": "No model on this phone",
-    "noModelBody": "This build has no disease model yet, so it cannot scan. Update the app when a new version is out.",
+    "noModelBody": "The disease model has to be downloaded to the phone once. After that, scanning works without internet.",
     "stub": "A TEST model from the development build is running. Results are meaningless.",
     "history": "Cases and history",
     "drafts": "{{count}} scan(s) not saved yet",
@@ -342,7 +343,9 @@
     "cameraError": "Could not take the photo. Try again or choose one from the library.",
     "libraryDenied": "Photo library access is off. Turn it on in the phone's Settings.",
     "openSettings": "Open settings",
-    "photoPicked": "Selected photo"
+    "photoPicked": "Selected photo",
+    "getModels": "Download model",
+    "recognizes": "Recognises: {{labels}}"
   },
   "result": {
     "disclaimer": "For reference only. It does not replace expert advice. Check the plant yourself before treating it.",
@@ -362,11 +365,16 @@
       "run": "The model stopped part-way.",
       "bad_output": "The model returned invalid data."
     },
-    "score": "Model score",
+    "score": "Predicted rate",
+    "scoreHint": "Rate the model predicts for this photo, not diagnostic accuracy.",
+    "notDisease": "Not a disease",
     "model": "Model {{id}} · version {{version}}",
     "part": "Plant part",
     "retry": "Try again",
     "otherPhoto": "Choose another photo",
+    "askPrefill": "My durian plant was scanned and the result is suspected {{label}}. What should I do?",
+    "askPrefillNoLabel": "What should I do based on my latest scan result?",
+    "askAssistant": "Ask the assistant about this result",
     "save": "Save scan",
     "relatedTitle": "Related articles",
     "noRelated": "No related article yet",
@@ -495,30 +503,23 @@
   },
   "chat": {
     "openSource": "Open source {{title}}",
+    "originalText": "Original text",
     "placeholder": "Ask about articles, your season or your cases",
     "searchPlaceholder": "Type words to search the downloaded articles",
     "input": "Question",
     "send": "Send question",
     "search": "Search articles",
-    "offline": "You are offline, so you cannot ask. The box below searches the downloaded articles; what you typed is kept and is not sent when the connection returns.",
     "consentTitle": "Allow the AI service",
     "consentBody": "To answer, your question and the related season and case data are sent to an external AI service. Photos, email and sign-in tokens are not sent. Without consent you can still search the downloaded articles. You can withdraw it in Settings.",
     "consentGrant": "I agree",
-    "context": "Answers use the season: {{season}}",
-    "unsynced": "{{count}} scans are not sent to the server yet, so they are not part of the answer.",
     "emptyTitle": "Ask about your farm",
     "emptyBody": "Answers rely only on approved articles and synced data, with sources you can reopen.",
     "insufficient": "Not enough sources",
     "noAnswer": "There are not enough approved sources to answer. You can search under Look up.",
     "sources": "Sources",
-    "asOf": "Farm data as of {{at}}",
-    "noContext": "No synced farm data was used",
-    "stale": "The farm data is old and may not show recent changes.",
     "report": "Report this answer",
     "failed": "The question was not sent",
-    "searchResults": "Articles found",
-    "syncedAt": "Last sync: {{at}}",
-    "neverSynced": "Farm data has not been synced on this phone"
+    "searchResults": "Articles found"
   },
   "report": {
     "gone": "This answer is no longer available to report.",
@@ -627,7 +628,12 @@
     "contentUnsupported": "Update the app to download newer content.",
     "about": "About",
     "version": "App version",
-    "linkFailed": "Could not open the link."
+    "linkFailed": "Could not open the link.",
+    "models": "Scan models",
+    "modelsInstalled": "{{count}} model(s) on this phone",
+    "modelsNone": "No model on this phone yet",
+    "modelsNew": "{{count}} new model(s) to download",
+    "modelsManage": "Manage models"
   },
   "account": {
     "signedInWith": "Signed in with {{provider}}",
@@ -639,5 +645,48 @@
     "switch": "Switch account",
     "unsyncedWarning": "{{count}} scans are not on the server yet.",
     "sendingScans": "Sending scans…"
+  },
+  "models": {
+    "newFor": "New model for {{part}}",
+    "download": "Download",
+    "retry": "Try again",
+    "waiting": "Waiting to download…",
+    "progress": "Downloaded {{done}} / {{total}}",
+    "verifying": "Checking the file…",
+    "needsAppUpdate": "A new model needs a newer version of the app. Please update the app.",
+    "downloadAll": "Download all ({{size}})",
+    "cancel": "Stop downloading",
+    "cellularTitle": "You are on mobile data",
+    "cellularBody": "The model is about {{size}}. It is better to download on Wi-Fi to save data. Download now anyway?",
+    "errors": {
+      "no_space": "Not enough free space on the phone. Free some photos or apps and try again.",
+      "network": "The connection dropped. The old model still works; try again.",
+      "changed": "The model was just updated on the server. Tap Check, then download again.",
+      "size_mismatch": "The downloaded file is damaged and was not used. Try again.",
+      "hash_mismatch": "The downloaded file is damaged and was not used. Try again.",
+      "cancelled": "Download stopped.",
+      "unknown": "Could not download. Try again."
+    },
+    "check": "Check",
+    "checking": "Checking…",
+    "checked": "Last checked {{when}}",
+    "neverChecked": "Never checked",
+    "checkFound": "A new model is ready to download.",
+    "checkUpToDate": "Models are up to date.",
+    "checkUnsupported": "Update the app to receive new models.",
+    "checkFailed": "Could not check. The models on this phone still work.",
+    "noneTitle": "No model yet",
+    "noneBody": "Connect to the internet and tap Check to download the disease model.",
+    "available": "Available to download",
+    "installed": "On this phone",
+    "beta": "Model still being improved",
+    "versionLine": "Version {{version}} · {{size}}",
+    "rollbackTo": "Go back to version {{version}}",
+    "rollbackTitle": "Go back to the previous version?",
+    "rollbackBody": "The previous model will be used for scanning. You can download the new one again later.",
+    "rollback": "Go back",
+    "rolledBack": "Went back to the previous version.",
+    "noPrevious": "No previous version on this phone.",
+    "newBadge": "New model available"
   }
 }

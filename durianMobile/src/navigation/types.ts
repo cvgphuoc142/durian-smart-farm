@@ -39,6 +39,7 @@ export type RootStackParamList = {
   ScanResult: { draftId: string };
   SaveScan: { draftId: string };
   Cases: undefined;
+  Models: undefined;
   CaseDetail: { caseId: string };
 
   // C, D. Knowledge, chatbot, standards
@@ -46,7 +47,7 @@ export type RootStackParamList = {
     articleId: string;
     versionId?: string;
   };
-  Chatbot: undefined;
+  Chatbot: { caseId?: string; prefill?: string } | undefined;
   ReportAnswer: { messageId: string };
   Standards: { market?: 'CN' | 'EU' } | undefined;
 

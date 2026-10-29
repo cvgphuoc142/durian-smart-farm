@@ -1,6 +1,5 @@
 import { USE_MOCK } from '@/config';
 
-import { bundledArtifacts, loadBundledManifest } from './bundled';
 import type { ModelEntry, ParsedManifest } from './manifest';
 import { parseManifest } from './manifest';
 import type { InferenceEngine } from './router';
@@ -21,7 +20,10 @@ const stubEntry = (plant_part: string, vi: string, en: string): ModelEntry => ({
   plant_part,
   part_labels: { vi, en },
   runtime: 'onnx',
-  artifact: { path: 'dev-stub', sha256: '0'.repeat(64) },
+  artifact: { path: 'dev-stub', sha256: '0'.repeat(64), size_bytes: 1 },
+  release_notes: 'Mô hình thử nghiệm',
+  maturity: 'beta',
+  supports_healthy: true,
   input: {
     name: 'input',
     width: 8,
@@ -61,9 +63,11 @@ export const stubEngine: InferenceEngine = {
   },
 };
 
-/** The manifest the app uses: the real one, plus the stub parts in a development build. */
-export function loadManifest(options: { stub?: boolean } = {}): ParsedManifest {
-  const real = loadBundledManifest();
+/**
+ * The entries the scan screens use: the models installed on the phone, plus the stub parts in a
+ * development build. A real model of a part always wins over the stub.
+ */
+export function withStubs(real: ParsedManifest, options: { stub?: boolean } = {}): ParsedManifest {
   if (!(options.stub ?? STUB_ENABLED)) return real;
   const have = new Set(real.entries.map((e) => e.plant_part));
   const stubs = [stubEntry('leaf', 'Lá', 'Leaf'), stubEntry('fruit', 'Trái', 'Fruit')].filter(
@@ -74,7 +78,4 @@ export function loadManifest(options: { stub?: boolean } = {}): ParsedManifest {
 
 // Keeps the stub entries valid against the schema (checked once in tests).
 export const _stubManifestForTest = (): ParsedManifest =>
-  parseManifest(
-    { schema_version: 1, entries: [stubEntry('leaf', 'Lá', 'Leaf')] },
-    (p) => p === 'dev-stub' || p in bundledArtifacts,
-  );
+  parseManifest({ schema_version: 1, entries: [stubEntry('leaf', 'Lá', 'Leaf')] });

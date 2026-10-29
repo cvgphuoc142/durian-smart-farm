@@ -1,11 +1,12 @@
 import { z } from 'zod';
 
 /**
- * The model manifest bundled with the app (brief §5, FR-B03). One entry per body part; the UI lists
- * only parts whose entry is complete and whose model file is really in the build.
+ * The model manifest the server publishes (`GET /v1/models/manifest`, FR-B03). One entry per body
+ * part. Everything the scan screens show or do comes from here: the body parts, the labels, whether
+ * a healthy result is possible, whether the model is still beta. The same schema reads the entries
+ * kept on the phone.
  *
- * Assumed layout: the provider has not sent a manifest yet. The fields follow architecture-overview
- * "Scan offline với nhiều model"; change them here, in one place, when the real one arrives.
+ * Keep in step with `durianBackend/app/scan_models/schema.py`.
  */
 const unit = z.number().min(0).max(1);
 
@@ -29,10 +30,24 @@ export const modelEntrySchema = z
     part_labels: z.object({ vi: z.string().min(1), en: z.string().min(1) }),
     runtime: z.literal('onnx'),
     artifact: z.object({
-      /** Key into the bundled model files (`src/ai/bundled.ts`). */
+      /** File name; the download link comes from `GET /v1/models/{id}/{version}/download`. */
       path: z.string().min(1),
       sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      size_bytes: z.number().int().positive(),
     }),
+    /** Vietnamese text shown when this version is offered, e.g. "Thêm 2 nhãn bệnh mới". */
+    release_notes: z.string().min(1),
+    /** `beta`: the screens say the model is still being improved. */
+    maturity: z.enum(['stable', 'beta']),
+    /** True only when a class has kind `healthy`; "Khỏe" is never shown otherwise. */
+    supports_healthy: z.boolean(),
+    /** Vietnamese note about this model's limits, shown under its results. */
+    limitations: z.string().min(1).nullish(),
+    /** An app older than this ignores the entry and asks the user to update the app. */
+    min_app_version: z
+      .string()
+      .regex(/^\d+(\.\d+){0,2}$/)
+      .nullish(),
     input: z.object({
       name: z.string().min(1),
       width: z.number().int().positive(),
@@ -76,6 +91,13 @@ export const modelEntrySchema = z
         message: 'temperature_softmax needs a temperature',
       });
     }
+    if (e.supports_healthy !== e.classes.some((c) => c.kind === 'healthy')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['supports_healthy'],
+        message: 'supports_healthy must match the classes',
+      });
+    }
     const seen = new Set<number>();
     e.classes.forEach((c, i) => {
       if (seen.has(c.index)) {
@@ -99,8 +121,13 @@ export const modelEntrySchema = z
     });
   });
 
+/** Newest manifest layout this build reads. A newer one needs a newer app. */
+export const SUPPORTED_MANIFEST_SCHEMA = 1;
+
 export const manifestSchema = z.object({
-  schema_version: z.literal(1),
+  schema_version: z.literal(SUPPORTED_MANIFEST_SCHEMA),
+  /** Changes whenever anything in `entries` changes; `null` for a list kept on the phone. */
+  revision: z.string().optional(),
   entries: z.array(z.unknown()),
 });
 
@@ -121,13 +148,28 @@ export interface ParsedManifest {
   rejected: RejectedEntry[];
 }
 
+/** `1.2.3` against `1.10`: numbers, missing parts are 0. */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return Math.sign(d);
+  }
+  return 0;
+}
+
+/** True when this app is older than the entry asks for. */
+export const appTooOld = (entry: ModelEntry, appVersion: string) =>
+  entry.min_app_version != null && compareVersions(appVersion, entry.min_app_version) < 0;
+
 /**
- * Keeps the entries that are complete: valid shape, one per body part, and with the model file
- * present in the build (`hasArtifact`). A part that fails is dropped, not guessed at (FR-B02).
+ * Keeps the entries that are complete: valid shape and one per body part. A part that fails is
+ * dropped, not guessed at (FR-B02). `accept` may veto a valid entry with a reason.
  */
 export function parseManifest(
   raw: unknown,
-  hasArtifact: (path: string) => boolean,
+  accept: (entry: ModelEntry) => string | null = () => null,
 ): ParsedManifest {
   const head = manifestSchema.safeParse(raw);
   if (!head.success) {
@@ -147,8 +189,9 @@ export function parseManifest(
       continue;
     }
     const entry = parsed.data;
-    if (!hasArtifact(entry.artifact.path)) {
-      rejected.push({ ...ref, reason: 'artifact_missing' });
+    const veto = accept(entry);
+    if (veto) {
+      rejected.push({ ...ref, reason: veto });
       continue;
     }
     if (entries.some((e) => e.plant_part === entry.plant_part)) {

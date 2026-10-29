@@ -61,7 +61,13 @@ export function useAsk() {
   const sending = useRef(false);
 
   const mutate = useMutation({
-    mutationFn: async (question: string): Promise<ChatMessage> => {
+    mutationFn: async ({
+      question,
+      caseId,
+    }: {
+      question: string;
+      caseId?: string;
+    }): Promise<ChatMessage> => {
       const store = useChatStore.getState();
       const userId = currentUserId();
       const history = ((userId && store.byUser[userId]) || [])
@@ -71,6 +77,7 @@ export function useAsk() {
         question,
         locale,
         season_id: season?.id,
+        case_id: caseId,
         history,
         client_last_synced_at: asOf,
       });
@@ -95,10 +102,10 @@ export function useAsk() {
   return {
     ...mutate,
     /** One tap sends once, even if the button is hit twice before the first call started. */
-    send: (question: string) => {
+    send: (question: string, caseId?: string) => {
       if (sending.current || !online) return Promise.resolve(null);
       sending.current = true;
-      return mutate.mutateAsync(question);
+      return mutate.mutateAsync({ question, caseId });
     },
     online,
     me,

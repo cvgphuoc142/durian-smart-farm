@@ -225,5 +225,6 @@ export const SCREENS: Record<ScreenName, ScreenMeta> = {
   },
   Settings: { code: 'SC-25', module: 'more', kind: 'stack', phase: 5, session: true, links: [] },
   ScanSync: { code: 'SC-26', module: 'more', kind: 'stack', phase: 3, session: true, links: [] },
+  Models: { code: 'SC-28', module: 'scan', kind: 'stack', phase: 3, session: true, links: [] },
   Account: { code: 'SC-27', module: 'more', kind: 'stack', phase: 5, session: true, links: [] },
 };

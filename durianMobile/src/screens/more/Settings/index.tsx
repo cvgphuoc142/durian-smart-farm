@@ -2,6 +2,8 @@ import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
+import { useModelStore } from '@/ai';
+import { ModelUpdateBanners } from '@/components/domain/ModelUpdateBanner';
 import {
   Button,
   Card,
@@ -24,6 +26,8 @@ import {
   useContentMeta,
   useContentRefresh,
   useFormat,
+  useModelCheck,
+  useModelUpdates,
   useRequireOnline,
 } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
@@ -45,6 +49,9 @@ export function Settings() {
   const meta = useContentMeta();
   const content = useContentRefresh();
   const language = i18n.language === 'en' ? 'en' : 'vi';
+  const models = useModelCheck();
+  const modelUpdates = useModelUpdates();
+  const installedCount = useModelStore((s) => Object.keys(s.installed).length);
 
   const toggleConsent = guard(async (on: boolean) => {
     try {
@@ -68,6 +75,22 @@ export function Settings() {
               : 'settings.contentFailed',
       ),
       result === 'updated' || result === 'up_to_date' ? 'success' : 'error',
+    );
+  });
+
+  const checkModels = guard(async () => {
+    const result = await models.check();
+    toast.show(
+      t(
+        result === 'update_available'
+          ? 'models.checkFound'
+          : result === 'up_to_date'
+            ? 'models.checkUpToDate'
+            : result === 'unsupported'
+              ? 'models.checkUnsupported'
+              : 'models.checkFailed',
+      ),
+      result === 'failed' || result === 'unsupported' ? 'error' : 'success',
     );
   });
 
@@ -139,6 +162,42 @@ export function Settings() {
               style={{ marginTop: spacing.md }}
             />
           </Card>
+        </Section>
+
+        <Section title={t('settings.models')}>
+          <View style={{ gap: spacing.sm }}>
+            <Card>
+              <Text variant="bodyStrong">
+                {installedCount > 0
+                  ? t('settings.modelsInstalled', { count: installedCount })
+                  : t('settings.modelsNone')}
+              </Text>
+              {modelUpdates.count > 0 ? (
+                <Text variant="secondary" color="textMuted">
+                  {t('settings.modelsNew', { count: modelUpdates.count })}
+                </Text>
+              ) : null}
+              {modelUpdates.checkedAt ? (
+                <Text variant="secondary" color="textMuted">
+                  {t('models.checked', { when: f.dateTime(modelUpdates.checkedAt) })}
+                </Text>
+              ) : null}
+              <Button
+                label={models.state === 'checking' ? t('models.checking') : t('models.check')}
+                variant="outline"
+                icon="refresh"
+                loading={models.state === 'checking'}
+                onPress={checkModels}
+                style={{ marginTop: spacing.md }}
+              />
+              <Button
+                label={t('settings.modelsManage')}
+                variant="ghost"
+                onPress={() => nav.navigate('Models')}
+              />
+            </Card>
+            <ModelUpdateBanners />
+          </View>
         </Section>
 
         <Section title={t('settings.about')}>

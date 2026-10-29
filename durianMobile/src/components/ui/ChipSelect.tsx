@@ -7,6 +7,7 @@ import { Chip } from './Chip';
 export interface ChipOption<T extends string = string> {
   id: T;
   label: string;
+  caption?: string;
 }
 
 export type ChipSelectProps<T extends string> =
@@ -33,6 +34,7 @@ export function ChipSelect<T extends string>(props: ChipSelectProps<T>) {
           <Chip
             key={o.id}
             label={o.label}
+            caption={o.caption}
             selected={selected}
             large
             onPress={() => {

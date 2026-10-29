@@ -147,7 +147,7 @@ export function SaveScan() {
     <View style={{ flexDirection: 'row', gap: spacing.md }}>
       <ScanPhoto uri={scan.photo_uri} size={88} />
       <View style={{ flex: 1 }}>
-        <ScanResultCard state={scan.outcome} label={scan.label_snapshot} score={scan.score} />
+        <ScanResultCard state={scan.outcome} label={scan.label_snapshot} predictions={scan.predictions} />
       </View>
     </View>
   );

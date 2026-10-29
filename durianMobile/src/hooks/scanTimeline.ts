@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 
 import { mergeCases, mergeScans, partLabel } from '@/sync/timeline';
 
-import { useLocalScans, useScanModels } from './scan';
+import { useScanModels } from './models';
+import { useLocalScans } from './scan';
 import { live, useSnapshot } from './snapshot';
 import { useFormat } from './useFormat';
 

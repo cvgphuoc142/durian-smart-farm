@@ -61,12 +61,12 @@ describe('setup gate', () => {
 });
 
 describe('navigation tree', () => {
-  it('has the 27 screens of the brief, SC-01…SC-27, each once', () => {
+  it('has the 27 screens of the brief plus the model manager, SC-01…SC-28, each once', () => {
     const codes = Object.values(SCREENS)
       .map((s) => s.code)
       .sort();
     expect(codes).toEqual(
-      Array.from({ length: 27 }, (_, i) => `SC-${String(i + 1).padStart(2, '0')}`),
+      Array.from({ length: 28 }, (_, i) => `SC-${String(i + 1).padStart(2, '0')}`),
     );
   });
 });

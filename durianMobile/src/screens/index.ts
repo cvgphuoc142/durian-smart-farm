@@ -14,6 +14,7 @@ export { Scan } from './scan/Scan';
 export { ScanResult } from './scan/ScanResult';
 export { SaveScan } from './scan/SaveScan';
 export { Cases } from './scan/Cases';
+export { Models } from './scan/Models';
 export { CaseDetail } from './scan/CaseDetail';
 export { Knowledge } from './lookup/Knowledge';
 export { Article } from './lookup/Article';

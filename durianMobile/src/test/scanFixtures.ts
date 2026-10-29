@@ -62,7 +62,10 @@ export const entry = (over: Partial<ModelEntry> = {}): ModelEntry => ({
   plant_part: 'leaf',
   part_labels: { vi: 'Lá', en: 'Leaf' },
   runtime: 'onnx',
-  artifact: { path: 'leaf.onnx', sha256: 'b'.repeat(64) },
+  artifact: { path: 'leaf.onnx', sha256: 'b'.repeat(64), size_bytes: 28_000_000 },
+  release_notes: 'Bản mới',
+  maturity: 'stable',
+  supports_healthy: true,
   input: {
     name: 'input',
     width: 2,

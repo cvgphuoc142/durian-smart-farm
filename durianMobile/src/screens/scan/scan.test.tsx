@@ -57,13 +57,7 @@ jest.mock('@/services', () => ({
   sha256OfFile: async () => 'a'.repeat(64),
 }));
 
-// The scan flow is tested against the dev stub, which only shows when no real model covers a part.
-jest.mock('@/ai/bundled', () => ({
-  bundledArtifacts: {},
-  bundledManifest: { schema_version: 1, entries: [] },
-  hasBundledArtifact: () => false,
-  loadBundledManifest: () => ({ entries: [], rejected: [] }),
-}));
+// With no model installed the dev stub is the only one, which is what the scan flow is tested on.
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, opts);
 const USER = 'mock-user';

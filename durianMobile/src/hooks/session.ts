@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 
 import { authApi, queryClient, syncApi } from '@/api';
 import { getProviderToken } from '@/services/authProvider';
+import { unregisterModelPush } from '@/services/pushRegistration';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useAppContext, useContextStore } from '@/stores/contextStore';
@@ -45,7 +46,10 @@ export async function logout({ discardScans = false }: { discardScans?: boolean 
   if (discardScans && userId) await discardAllScans(userId);
   // Revoke the session server-side while the token is still attached. Best effort: offline or an
   // already-expired session must not trap the farmer in the app.
-  if (useAuthStore.getState().token) await authApi.logout().catch(() => undefined);
+  if (useAuthStore.getState().token) {
+    await unregisterModelPush();
+    await authApi.logout().catch(() => undefined);
+  }
   await useAuthStore.getState().signOut();
   useChatStore.getState().clear();
   queryClient.clear();

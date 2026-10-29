@@ -68,7 +68,8 @@
     "ContactDetail": "Liên hệ",
     "Settings": "Cài đặt",
     "ScanSync": "Đồng bộ Scan",
-    "Account": "Tài khoản"
+    "Account": "Tài khoản",
+    "Models": "Mô hình nhận diện"
   },
   "context": {
     "title": "Chọn vườn, lô, vụ",
@@ -333,7 +334,7 @@
     "running": "Đang phân tích trên máy…",
     "oneImage": "Mỗi lần quét một ảnh.",
     "noModelTitle": "Chưa có mô hình trên máy",
-    "noModelBody": "Bản cài đặt này chưa có mô hình nhận diện bệnh nên chưa quét được. Hãy cập nhật ứng dụng khi có bản mới.",
+    "noModelBody": "Cần tải mô hình nhận diện về máy một lần. Sau đó quét được cả khi không có mạng.",
     "stub": "Đang dùng mô hình THỬ NGHIỆM của bản phát triển. Kết quả không có giá trị.",
     "history": "Ca bệnh và lịch sử",
     "drafts": "Có {{count}} lần quét chưa lưu",
@@ -342,7 +343,9 @@
     "cameraError": "Không chụp được. Thử lại hoặc chọn ảnh từ thư viện.",
     "libraryDenied": "Chưa được phép truy cập thư viện ảnh. Bật trong Cài đặt của điện thoại.",
     "openSettings": "Mở cài đặt",
-    "photoPicked": "Ảnh đã chọn"
+    "photoPicked": "Ảnh đã chọn",
+    "getModels": "Tải mô hình",
+    "recognizes": "Mô hình nhận diện: {{labels}}"
   },
   "result": {
     "disclaimer": "Kết quả chỉ để tham khảo, không thay thế ý kiến chuyên gia. Hãy kiểm tra thực tế trước khi xử lý.",
@@ -362,11 +365,16 @@
       "run": "Mô hình dừng giữa chừng.",
       "bad_output": "Mô hình trả về dữ liệu không hợp lệ."
     },
-    "score": "Điểm mô hình",
+    "score": "Tỉ lệ dự đoán",
+    "scoreHint": "Tỉ lệ mô hình dự đoán cho ảnh này, không phải độ chính xác chẩn đoán.",
+    "notDisease": "Không phải bệnh",
     "model": "Mô hình {{id}} · phiên bản {{version}}",
     "part": "Bộ phận",
     "retry": "Thử lại",
     "otherPhoto": "Chọn ảnh khác",
+    "askPrefill": "Cây sầu riêng của tôi vừa quét ra kết quả nghi {{label}}. Tôi nên làm gì?",
+    "askPrefillNoLabel": "Tôi nên làm gì dựa trên kết quả quét mới nhất?",
+    "askAssistant": "Hỏi trợ lý về kết quả này",
     "save": "Lưu scan",
     "relatedTitle": "Bài liên quan",
     "noRelated": "Chưa có bài liên quan",
@@ -495,30 +503,23 @@
   },
   "chat": {
     "openSource": "Mở nguồn {{title}}",
+    "originalText": "Văn bản gốc",
     "placeholder": "Hỏi về bài viết, vụ hoặc ca bệnh của bạn",
     "searchPlaceholder": "Gõ từ khóa để tìm bài đã tải",
     "input": "Câu hỏi",
     "send": "Gửi câu hỏi",
     "search": "Tìm bài",
-    "offline": "Đang offline nên chưa hỏi được. Ô bên dưới đang tìm trong bài đã tải; câu bạn gõ được giữ lại và không tự gửi khi có mạng.",
     "consentTitle": "Cho phép dùng dịch vụ AI",
     "consentBody": "Để trả lời, câu hỏi và dữ liệu vụ, ca bệnh liên quan được gửi tới dịch vụ AI bên ngoài. Ảnh, email và mã đăng nhập không được gửi. Chưa đồng ý thì bạn vẫn tìm được bài đã tải. Có thể rút lại trong Cài đặt.",
     "consentGrant": "Đồng ý",
-    "context": "Trả lời dựa trên vụ: {{season}}",
-    "unsynced": "Có {{count}} lần quét chưa gửi lên máy chủ nên chưa được tính vào câu trả lời.",
     "emptyTitle": "Hỏi về vườn của bạn",
     "emptyBody": "Câu trả lời chỉ dựa trên bài đã duyệt và dữ liệu đã đồng bộ, kèm nguồn để bạn mở lại.",
     "insufficient": "Chưa đủ nguồn",
     "noAnswer": "Chưa có đủ nguồn đã duyệt để trả lời. Bạn có thể tìm trong mục Tra cứu.",
     "sources": "Nguồn",
-    "asOf": "Dữ liệu vườn tính đến {{at}}",
-    "noContext": "Chưa có dữ liệu vườn đã đồng bộ nào được dùng",
-    "stale": "Dữ liệu vườn đã cũ, có thể chưa phản ánh thay đổi gần đây.",
     "report": "Báo cáo câu trả lời",
     "failed": "Chưa gửi được câu hỏi",
-    "searchResults": "Bài tìm được",
-    "syncedAt": "Lần đồng bộ gần nhất: {{at}}",
-    "neverSynced": "Chưa đồng bộ dữ liệu vườn trên máy này"
+    "searchResults": "Bài tìm được"
   },
   "report": {
     "gone": "Không còn câu trả lời này để báo cáo.",
@@ -627,7 +628,12 @@
     "contentUnsupported": "Cần cập nhật ứng dụng để tải nội dung mới.",
     "about": "Thông tin",
     "version": "Phiên bản ứng dụng",
-    "linkFailed": "Không mở được liên kết."
+    "linkFailed": "Không mở được liên kết.",
+    "models": "Mô hình nhận diện",
+    "modelsInstalled": "{{count}} mô hình trên máy",
+    "modelsNone": "Chưa có mô hình nào trên máy",
+    "modelsNew": "Có {{count}} mô hình mới để tải",
+    "modelsManage": "Quản lý mô hình"
   },
   "account": {
     "signedInWith": "Đăng nhập bằng {{provider}}",
@@ -639,5 +645,48 @@
     "switch": "Đổi tài khoản",
     "unsyncedWarning": "Còn {{count}} scan chưa gửi lên máy chủ.",
     "sendingScans": "Đang gửi các scan…"
+  },
+  "models": {
+    "newFor": "Có mô hình mới cho {{part}}",
+    "download": "Tải về",
+    "retry": "Thử lại",
+    "waiting": "Đang chờ tải…",
+    "progress": "Đã tải {{done}} / {{total}}",
+    "verifying": "Đang kiểm tra tệp…",
+    "needsAppUpdate": "Có mô hình mới cần bản ứng dụng mới hơn. Hãy cập nhật ứng dụng.",
+    "downloadAll": "Tải tất cả ({{size}})",
+    "cancel": "Dừng tải",
+    "cellularTitle": "Đang dùng dữ liệu di động",
+    "cellularBody": "Mô hình nặng khoảng {{size}}. Nên tải khi có Wi-Fi để đỡ tốn dung lượng. Vẫn tải bây giờ?",
+    "errors": {
+      "no_space": "Máy không đủ dung lượng trống. Hãy xóa bớt ảnh hoặc ứng dụng rồi thử lại.",
+      "network": "Mất kết nối khi tải. Mô hình cũ vẫn dùng được, hãy thử lại.",
+      "changed": "Mô hình vừa được cập nhật trên máy chủ. Bấm Kiểm tra rồi tải lại.",
+      "size_mismatch": "Tệp tải về bị lỗi nên chưa dùng. Hãy thử lại.",
+      "hash_mismatch": "Tệp tải về bị lỗi nên chưa dùng. Hãy thử lại.",
+      "cancelled": "Đã dừng tải.",
+      "unknown": "Chưa tải được. Hãy thử lại."
+    },
+    "check": "Kiểm tra",
+    "checking": "Đang kiểm tra…",
+    "checked": "Kiểm tra lần cuối {{when}}",
+    "neverChecked": "Chưa kiểm tra lần nào",
+    "checkFound": "Có mô hình mới để tải.",
+    "checkUpToDate": "Mô hình đã là bản mới nhất.",
+    "checkUnsupported": "Cần cập nhật ứng dụng để nhận mô hình mới.",
+    "checkFailed": "Chưa kiểm tra được. Mô hình trên máy vẫn dùng được.",
+    "noneTitle": "Chưa có mô hình nào",
+    "noneBody": "Hãy kết nối mạng rồi bấm Kiểm tra để tải mô hình nhận diện.",
+    "available": "Có thể tải về",
+    "installed": "Đã có trên máy",
+    "beta": "Mô hình đang hoàn thiện",
+    "versionLine": "Bản {{version}} · {{size}}",
+    "rollbackTo": "Quay lại bản {{version}}",
+    "rollbackTitle": "Quay lại bản trước?",
+    "rollbackBody": "Mô hình trước sẽ được dùng để quét. Bạn có thể tải lại bản mới sau.",
+    "rollback": "Quay lại",
+    "rolledBack": "Đã quay lại bản trước.",
+    "noPrevious": "Không còn bản trước trên máy.",
+    "newBadge": "Có mô hình mới"
   }
 }

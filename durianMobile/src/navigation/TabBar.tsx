@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, Text, type IconName } from '@/components/ui';
+import { useModelUpdates } from '@/hooks';
 import { colors, shadows, sizes } from '@/theme';
 
 import type { MainTabParamList } from './types';
@@ -23,6 +24,7 @@ const RING = 4;
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { count: newModels } = useModelUpdates();
 
   return (
     <View
@@ -54,11 +56,14 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
             onPress={onPress}
             accessibilityRole="tab"
             accessibilityState={{ selected: isFocused }}
-            accessibilityLabel={t(tab.label)}
+            accessibilityLabel={
+              isScan && newModels > 0 ? `${t(tab.label)}, ${t('models.newBadge')}` : t(tab.label)
+            }
           >
             {isScan ? (
               <View style={styles.scanButton}>
                 <Icon name={tab.icon} size={28} color="white" />
+                {newModels > 0 ? <View testID="scan-new-model-dot" style={styles.dot} /> : null}
               </View>
             ) : (
               <Icon name={tab.icon} size={24} color={color} />
@@ -105,4 +110,15 @@ const styles = StyleSheet.create({
     ...shadows.scan,
   },
   scanLabel: { fontWeight: '700' },
+  dot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.danger,
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
 });

@@ -120,6 +120,7 @@ describe('content release', () => {
       version_id: 'art-phyto-v1',
       version_no: 1,
       title: 'Bệnh xì mủ (mẫu)',
+      source_links: [],
     };
     await contentRepo.pinCitations([cited]);
 

@@ -15,3 +15,6 @@ export { CitationChip } from './CitationChip';
 export { StandardItemRow } from './StandardItemRow';
 export { ContactCard } from './ContactCard';
 export { ContentSyncHost } from './ContentSyncHost';
+export { ModelSyncHost } from './ModelSyncHost';
+export { ModelUpdateBanners, ModelUpdateCard } from './ModelUpdateBanner';
+export { useModelInstaller } from './ModelInstall';
