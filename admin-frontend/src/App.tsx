@@ -5,12 +5,14 @@ import { Articles } from './pages/Articles';
 import { Standards } from './pages/Standards';
 import { Contacts } from './pages/Contacts';
 import { ChatReports } from './pages/ChatReports';
+import { Models } from './pages/Models';
 import { Icons } from './icons';
 
 const TABS = {
   articles: ['Articles', Articles],
   standards: ['Standards', Standards],
   contacts: ['Contacts', Contacts],
+  models: ['Scan models', Models],
   reports: ['Chat reports', ChatReports],
 } as const;
 type Tab = keyof typeof TABS;

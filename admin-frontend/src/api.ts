@@ -144,6 +144,35 @@ export interface ChatReport {
   created_at: string;
 }
 
+export interface ModelClass {
+  index: number;
+  kind: 'disease' | 'healthy' | 'other';
+  disease_code: string | null;
+  labels: { vi?: string; en?: string };
+}
+export interface ModelEntry {
+  model_id: string;
+  version: string;
+  plant_part: string;
+  part_labels: { vi: string; en: string };
+  classes: ModelClass[];
+  release_notes: string;
+  maturity: 'stable' | 'beta';
+  supports_healthy: boolean;
+  limitations?: string;
+  min_app_version?: string;
+  [k: string]: unknown;
+}
+export interface ModelVersion {
+  id: string;
+  status: 'draft' | 'published' | 'unpublished';
+  entry: ModelEntry;
+  artifact: { sha256: string; size_bytes: number; status: 'pending' | 'ready' };
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+}
+
 export const STATUSES: Status[] = ['draft', 'in_review', 'approved', 'published', 'unpublished'];
 export const NEXT_ACTIONS: Record<Status, Action[]> = {
   draft: ['submit_review'],
