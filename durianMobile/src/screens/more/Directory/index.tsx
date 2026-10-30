@@ -1,3 +1,4 @@
+import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
@@ -15,6 +16,7 @@ import {
 } from '@/components/ui';
 import { refreshContent } from '@/content';
 import { useContacts, useContentMeta, useIsOnline, useProvinces } from '@/hooks';
+import type { RootStackParamList } from '@/navigation/types';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
 import type { ContactKind } from '@/types';
@@ -32,7 +34,10 @@ export function Directory() {
   const online = useIsOnline();
   const provinces = useProvinces();
   const [kind, setKind] = useState<ContactKind | null>(null);
-  const [province, setProvince] = useState<string | null>(null);
+  const asked = useRoute<RouteProp<RootStackParamList, 'Directory'>>().params?.province ?? null;
+  const [picked, setProvince] = useState<string | null>(asked);
+  // A province with no contacts in the pack would show an empty list, so it falls back to all.
+  const province = picked && provinces.includes(picked) ? picked : null;
   const [typed, setTyped] = useState('');
   const [text, setText] = useState('');
 

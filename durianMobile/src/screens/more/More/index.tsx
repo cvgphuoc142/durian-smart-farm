@@ -31,18 +31,6 @@ export function More() {
             leading={{ type: 'tile', icon: 'users', tone: 'info' }}
             onPress={() => nav.navigate('Directory')}
           />
-          <ListRow
-            title={t('more.scanSync')}
-            leading={{ type: 'tile', icon: 'cloud', tone: 'neutral' }}
-            trailing={
-              waiting > 0 ? (
-                <Badge label={t('more.scanSyncWaiting', { count: waiting })} tone="warning" />
-              ) : (
-                <Badge label={t('more.scanSyncAllSent')} tone="primary" />
-              )
-            }
-            onPress={() => nav.navigate('ScanSync')}
-          />
         </ListGroup>
         <ListGroup>
           <ListRow
@@ -55,6 +43,18 @@ export function More() {
             title={t('more.account')}
             leading={{ type: 'tile', icon: 'user', tone: 'neutral' }}
             onPress={() => nav.navigate('Account')}
+          />
+          <ListRow
+            title={t('more.scanSync')}
+            leading={{ type: 'tile', icon: 'cloud', tone: 'neutral' }}
+            trailing={
+              waiting > 0 ? (
+                <Badge label={t('more.scanSyncWaiting', { count: waiting })} tone="warning" />
+              ) : (
+                <Badge label={t('more.scanSyncAllSent')} tone="primary" />
+              )
+            }
+            onPress={() => nav.navigate('ScanSync')}
           />
         </ListGroup>
       </View>

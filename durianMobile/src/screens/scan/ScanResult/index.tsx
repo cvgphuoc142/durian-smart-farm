@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
 import { STUB_MODEL_ID } from '@/ai';
-import { ScanPhoto, ScanResultCard } from '@/components/domain';
+import { CallExpertButton, ScanPhoto, ScanResultCard } from '@/components/domain';
 import {
   Badge,
   Button,
@@ -156,6 +156,8 @@ export function ScanResult() {
             )}
           </View>
         )}
+
+        {scan.outcome === 'suspected' ? <CallExpertButton /> : null}
 
         <Button
           variant="outline"

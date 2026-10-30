@@ -2,17 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
-import { CareLogRow } from '@/components/domain';
-import {
-  Button,
-  Chip,
-  ChipRow,
-  EmptyState,
-  Header,
-  IconButton,
-  ListGroup,
-  Screen,
-} from '@/components/ui';
+import { CareLogRow, SeasonHeader } from '@/components/domain';
+import { Button, Chip, ChipRow, EmptyState, ListGroup, Screen } from '@/components/ui';
 import { useSeasonData } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
@@ -22,7 +13,7 @@ import { CARE_KINDS, type CareKind } from '@/types';
 export function CareLogs() {
   const { t } = useTranslation();
   const nav = useAppNavigation();
-  const { season, careLogs, expenses } = useSeasonData();
+  const { careLogs, expenses } = useSeasonData();
   const [kind, setKind] = useState<CareKind | null>(null);
 
   const shown = careLogs
@@ -36,15 +27,17 @@ export function CareLogs() {
     <Screen
       withTabBar
       header={
-        <Header
+        <SeasonHeader
           title={t('screens.CareLogs')}
-          subtitle={season?.name}
           right={
-            <IconButton
-              icon="bug"
+            <Button
+              size="md"
               variant="outline"
+              icon="bug"
+              label={t('cases.entry')}
               accessibilityLabel={t('screens.Cases')}
               onPress={() => nav.navigate('Cases')}
+              style={{ paddingHorizontal: spacing.md }}
             />
           }
         />

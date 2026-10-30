@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
+import { SeasonHeader } from '@/components/domain';
 import {
   Badge,
   Button,
   ChipRow,
   Chip,
   EmptyState,
-  Header,
   ListGroup,
   ListRow,
   Screen,
@@ -25,7 +25,7 @@ export function Expenses() {
   const { t } = useTranslation();
   const f = useFormat();
   const nav = useAppNavigation();
-  const { season, expenses } = useSeasonData();
+  const { expenses } = useSeasonData();
   const [category, setCategory] = useState<ExpenseCategory | null>(null);
 
   const shown = useMemo(
@@ -43,12 +43,7 @@ export function Expenses() {
   return (
     <Screen
       header={
-        <Header
-          title={t('screens.Expenses')}
-          subtitle={season?.name}
-          variant="back"
-          onBack={() => nav.goBack()}
-        />
+        <SeasonHeader title={t('screens.Expenses')} variant="back" onBack={() => nav.goBack()} />
       }
       footer={
         <Button label={t('expense.add')} icon="plus" onPress={() => nav.navigate('AddExpense')} />

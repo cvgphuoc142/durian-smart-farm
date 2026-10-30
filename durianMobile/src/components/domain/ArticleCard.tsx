@@ -15,9 +15,7 @@ export function ArticleCard({ article, onPress }: { article: Article; onPress: (
   return (
     <ListRow
       title={article.title}
-      subtitle={[article.category ? category(article.category) : null, `v${article.version_no}`]
-        .filter(Boolean)
-        .join(' · ')}
+      subtitle={article.category ? category(article.category) : undefined}
       leading={{ type: 'tile', icon: 'book', tone: article.disease_code ? 'danger' : 'primary' }}
       chevron
       onPress={onPress}

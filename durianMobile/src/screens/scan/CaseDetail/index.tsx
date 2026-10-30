@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
 import { upsert } from '@/api';
-import { CareLogRow, ScanRow } from '@/components/domain';
+import { CallExpertButton, CareLogRow, ScanRow } from '@/components/domain';
 import {
   Badge,
   Button,
@@ -125,6 +125,7 @@ export function CaseDetail() {
               ...(item.note ? [{ label: t('caseDetail.note'), value: item.note }] : []),
             ]}
           />
+          {closed ? null : <CallExpertButton />}
         </View>
 
         <View style={{ gap: spacing.sm }}>

@@ -70,6 +70,8 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
             )}
             <Text
               variant="tabLabel"
+              maxFontSizeMultiplier={1.3}
+              numberOfLines={1}
               color={isScan ? 'primary' : color}
               style={[isFocused && !isScan && styles.active, isScan && styles.scanLabel]}
             >

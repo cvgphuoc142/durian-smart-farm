@@ -2,17 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
-import { SaleCard } from '@/components/domain';
-import {
-  Button,
-  Chip,
-  ChipRow,
-  EmptyState,
-  Header,
-  InfoBanner,
-  Screen,
-  Text,
-} from '@/components/ui';
+import { SaleCard, SeasonHeader } from '@/components/domain';
+import { Button, Chip, ChipRow, EmptyState, InfoBanner, Screen, Text } from '@/components/ui';
 import { useFormat, useSeasonData } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
@@ -24,7 +15,7 @@ export function Sales() {
   const { t } = useTranslation();
   const f = useFormat();
   const nav = useAppNavigation();
-  const { season, sales, payments, summary } = useSeasonData();
+  const { sales, payments, summary } = useSeasonData();
   const [status, setStatus] = useState<SaleStatus | null>(null);
 
   const shown = sales
@@ -34,12 +25,7 @@ export function Sales() {
   return (
     <Screen
       header={
-        <Header
-          title={t('screens.Sales')}
-          subtitle={season?.name}
-          variant="back"
-          onBack={() => nav.goBack()}
-        />
+        <SeasonHeader title={t('screens.Sales')} variant="back" onBack={() => nav.goBack()} />
       }
       footer={<Button label={t('sale.add')} icon="plus" onPress={() => nav.navigate('AddSale')} />}
     >

@@ -32,7 +32,9 @@
     ],
     "loadError": "Couldn't load the data. Check your connection and try again.",
     "draftRestored": "Draft restored",
-    "saved": "Saved"
+    "saved": "Saved",
+    "expand": "Show",
+    "collapse": "Hide"
   },
   "tabs": {
     "overview": "Overview",
@@ -251,7 +253,9 @@
     "forecastNote": "Forecast numbers are kept apart and never added to the recorded figures.",
     "editForecast": "Enter forecast",
     "addExpense": "Add expense",
-    "addSale": "Add sale"
+    "addSale": "Add sale",
+    "openCases": "{{count}} open cases",
+    "forecastShort": "See forecast"
   },
   "expense": {
     "add": "Add expense",
@@ -319,7 +323,8 @@
     "withExpense": "Record a cost with it",
     "withExpenseHint": "Creates one expense linked to this entry.",
     "emptyTitle": "No log entries yet",
-    "emptyBody": "Record what you did in the orchard: watering, fertilizing, spraying, pruning, inspection."
+    "emptyBody": "Record what you did in the orchard: watering, fertilizing, spraying, pruning, inspection.",
+    "caseTreatment": "Case treatment"
   },
   "scan": {
     "permissionTitle": "Allow camera access",
@@ -345,7 +350,8 @@
     "openSettings": "Open settings",
     "photoPicked": "Selected photo",
     "getModels": "Download model",
-    "recognizes": "Recognises: {{labels}}"
+    "recognizes": "Recognises: {{labels}}",
+    "needInput": "Pick a photo and the plant part to analyse"
   },
   "result": {
     "disclaimer": "For reference only. It does not replace expert advice. Check the plant yourself before treating it.",
@@ -380,7 +386,12 @@
     "noRelated": "No related article yet",
     "stub": "Test model",
     "gone": "This scan was not found.",
-    "alreadySaved": "This scan is already saved."
+    "alreadySaved": "This scan is already saved.",
+    "matchHigh": "Very similar",
+    "matchMid": "Fairly similar",
+    "matchLow": "Slightly similar",
+    "details": "Details",
+    "callExpert": "Call an expert or shop"
   },
   "saveScan": {
     "season": "Save to season",
@@ -421,7 +432,8 @@
     "newScan": "New scan",
     "syncStatus": "Sync status",
     "caseTitle": "Case of {{date}}",
-    "noCase": "No case"
+    "noCase": "No case",
+    "entry": "Cases"
   },
   "caseDetail": {
     "closeCase": "Close case",
@@ -589,14 +601,16 @@
     "disclaimer": "Approved by an administrator. Please confirm yourself before visiting or buying."
   },
   "signIn": {
-    "welcome": "Welcome to DurianOS",
+    "welcome": "Welcome to Sầu Riêng AI",
     "intro": "Sign in to keep your orchard data safe and use it on more than one phone.",
     "language": "Language",
     "google": "Continue with Google",
     "apple": "Continue with Apple",
     "failed": "Could not sign in. Check your connection and try again.",
     "notConfigured": "Google/Apple sign-in is not set up in this build.",
-    "restoreNote": "Sign in with the same account you used before to get your data back on a new phone. Google and Apple are separate accounts, their data is not merged."
+    "restoreNote": "Sign in with the same account you used before to get your data back on a new phone. Google and Apple are separate accounts, their data is not merged.",
+    "privacyPrefix": "By continuing you agree to the ",
+    "privacyLink": "Privacy Policy"
   },
   "more": {
     "directory": "Stores and experts directory",
@@ -637,7 +651,9 @@
     "modelsInstalled": "{{count}} model(s) on this phone",
     "modelsNone": "No model on this phone yet",
     "modelsNew": "{{count}} new model(s) to download",
-    "modelsManage": "Manage models"
+    "modelsManage": "Manage models",
+    "privacy": "Privacy Policy",
+    "support": "Support"
   },
   "account": {
     "signedInWith": "Signed in with {{provider}}",
@@ -648,7 +664,14 @@
     "signOut": "Sign out",
     "switch": "Switch account",
     "unsyncedWarning": "{{count}} scans are not on the server yet.",
-    "sendingScans": "Sending scans…"
+    "sendingScans": "Sending scans…",
+    "delete": "Delete account",
+    "deleteTitle": "Delete account?",
+    "deleteBody": "Your farms, plots, seasons, care logs, expenses, sales and scan photos will be deleted from the server and this phone. This cannot be undone.",
+    "deleteUnsynced": "{{count}} scans not yet sent will also be deleted.",
+    "deleteConfirm": "Delete permanently",
+    "deleted": "Account deleted.",
+    "deleteFailed": "Could not delete. Check your connection and try again."
   },
   "models": {
     "newFor": "New model for {{part}}",

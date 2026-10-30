@@ -11,7 +11,6 @@ import {
   ChipSelect,
   EmptyState,
   Header,
-  IconButton,
   InfoBanner,
   Button,
   Screen,
@@ -107,24 +106,34 @@ export function Scan() {
           variant="back"
           onBack={() => nav.goBack()}
           right={
-            <IconButton
-              icon="bug"
+            <Button
+              size="md"
               variant="outline"
+              icon="bug"
+              label={t('cases.entry')}
               accessibilityLabel={t('scan.history')}
               onPress={() => nav.navigate('Cases')}
+              style={{ paddingHorizontal: spacing.md }}
             />
           }
         />
       }
       footer={
         noModel ? undefined : (
-          <Button
-            label={running ? t('scan.running') : t('scan.run')}
-            icon="scan"
-            loading={running}
-            disabled={!picked || !part}
-            onPress={run}
-          />
+          <View style={{ gap: spacing.xs }}>
+            {!picked || !part ? (
+              <Text variant="caption" color="textMuted" style={{ textAlign: 'center' }}>
+                {t('scan.needInput')}
+              </Text>
+            ) : null}
+            <Button
+              label={running ? t('scan.running') : t('scan.run')}
+              icon="scan"
+              loading={running}
+              disabled={!picked || !part}
+              onPress={run}
+            />
+          </View>
         )
       }
       contentStyle={{ paddingHorizontal: spacing.gutter, gap: spacing.lg }}
@@ -193,39 +202,34 @@ export function Scan() {
               )}
             </View>
 
-            <View style={{ gap: spacing.sm }}>
-              {picked ? (
+            {picked ? (
+              <Button
+                variant="outline"
+                size="md"
+                icon="refresh"
+                label={t('scan.changePhoto')}
+                onPress={() => setPicked(null)}
+              />
+            ) : (
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                 <Button
-                  variant="outline"
+                  grow
                   size="md"
-                  icon="refresh"
-                  label={t('scan.changePhoto')}
-                  onPress={() => setPicked(null)}
+                  icon="camera"
+                  label={t('scan.takePhoto')}
+                  disabled={!permission?.granted || !cameraReady}
+                  onPress={take}
                 />
-              ) : (
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <Button
-                    grow
-                    size="md"
-                    icon="camera"
-                    label={t('scan.takePhoto')}
-                    disabled={!permission?.granted || !cameraReady}
-                    onPress={take}
-                  />
-                  <Button
-                    grow
-                    size="md"
-                    variant="outline"
-                    icon="image"
-                    label={t('scan.pickLibrary')}
-                    onPress={pick}
-                  />
-                </View>
-              )}
-              <Text variant="caption" color="textMuted">
-                {t('scan.oneImage')}
-              </Text>
-            </View>
+                <Button
+                  grow
+                  size="md"
+                  variant="outline"
+                  icon="image"
+                  label={t('scan.pickLibrary')}
+                  onPress={pick}
+                />
+              </View>
+            )}
 
             <View style={{ gap: spacing.sm }}>
               <Text variant="bodyStrong">{t('scan.part')}</Text>
@@ -256,7 +260,8 @@ export function Scan() {
 
 const styles = StyleSheet.create({
   frame: {
-    aspectRatio: 3 / 4,
+    // Landscape preview keeps the buttons, the part and Analyse on one screen, even on a small phone.
+    aspectRatio: 4 / 3,
     borderRadius: radius.hero,
     overflow: 'hidden',
     backgroundColor: colors.ink,

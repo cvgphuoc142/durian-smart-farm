@@ -70,7 +70,10 @@ export function Knowledge() {
     name: (v: string) => string,
   ) =>
     options.length > 0 ? (
-      <View accessibilityLabel={label}>
+      <View accessibilityLabel={label} style={{ gap: spacing.xs }}>
+        <Text variant="caption" color="textMuted" style={{ paddingHorizontal: spacing.gutter }}>
+          {label}
+        </Text>
         <ChipRow>
           <Chip label={t('common.all')} selected={value == null} onPress={() => set(null)} />
           {options.map((o) => (

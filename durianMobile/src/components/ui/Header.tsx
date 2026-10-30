@@ -1,15 +1,19 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { colors, spacing } from '@/theme';
 
+import { Icon } from './Icon';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
 export interface HeaderProps {
   title: string;
   subtitle?: string;
+  /** Makes the subtitle a button with a ▾, e.g. to switch the season. */
+  onSubtitlePress?: () => void;
+  subtitleLabel?: string;
   /** Large page title with an optional right action, or a back-button bar. */
   variant?: 'large' | 'back';
   onBack?: () => void;
@@ -19,8 +23,36 @@ export interface HeaderProps {
   meta?: ReactNode;
 }
 
-export function Header({ title, subtitle, variant = 'large', onBack, right, meta }: HeaderProps) {
+export function Header({
+  title,
+  subtitle,
+  onSubtitlePress,
+  subtitleLabel,
+  variant = 'large',
+  onBack,
+  right,
+  meta,
+}: HeaderProps) {
   const { t } = useTranslation();
+  const sub =
+    subtitle && onSubtitlePress ? (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={subtitleLabel ? `${subtitleLabel}: ${subtitle}` : subtitle}
+        onPress={onSubtitlePress}
+        hitSlop={8}
+        style={styles.subtitleButton}
+      >
+        <Text variant="label" color="primary" numberOfLines={1} style={styles.shrink}>
+          {subtitle}
+        </Text>
+        <Icon name="chevronDown" size={18} color="primary" />
+      </Pressable>
+    ) : subtitle ? (
+      <Text variant="secondary" color="textMuted">
+        {subtitle}
+      </Text>
+    ) : null;
 
   if (variant === 'back') {
     return (
@@ -35,11 +67,7 @@ export function Header({ title, subtitle, variant = 'large', onBack, right, meta
           <Text variant="cardTitle" numberOfLines={1}>
             {title}
           </Text>
-          {subtitle ? (
-            <Text variant="secondary" color="textMuted" numberOfLines={1}>
-              {subtitle}
-            </Text>
-          ) : null}
+          {sub}
         </View>
         {meta}
         {right}
@@ -53,11 +81,7 @@ export function Header({ title, subtitle, variant = 'large', onBack, right, meta
         <Text variant="pageTitle" accessibilityRole="header">
           {title}
         </Text>
-        {subtitle ? (
-          <Text variant="secondary" color="textMuted">
-            {subtitle}
-          </Text>
-        ) : null}
+        {sub}
       </View>
       {right}
     </View>
@@ -75,4 +99,12 @@ const styles = StyleSheet.create({
   },
   backRow: { backgroundColor: colors.bg },
   flex: { flex: 1 },
+  shrink: { flexShrink: 1 },
+  subtitleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    minHeight: 32,
+  },
 });

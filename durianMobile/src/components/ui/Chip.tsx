@@ -82,12 +82,27 @@ export function ChipRow({ children }: { children: ReactNode }) {
       >
         {children}
       </ScrollView>
+      {/* Fades the right edge so a cut-off chip reads as "scroll for more". */}
+      <View pointerEvents="none" style={styles.fade}>
+        {FADE.map((opacity, i) => (
+          <View key={i} style={[styles.fadeStep, { opacity }]} />
+        ))}
+      </View>
     </View>
   );
 }
 
+const FADE = [0.15, 0.35, 0.6, 0.85];
+
 const styles = StyleSheet.create({
-  row: { paddingHorizontal: spacing.gutter, gap: spacing.sm, alignItems: 'center' },
+  row: {
+    paddingLeft: spacing.gutter,
+    paddingRight: spacing.gutter + spacing.xl,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  fade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 24, flexDirection: 'row' },
+  fadeStep: { flex: 1, backgroundColor: colors.bg },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

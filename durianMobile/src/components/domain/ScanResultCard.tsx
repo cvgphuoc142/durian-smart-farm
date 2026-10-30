@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { Badge, Card, Icon, Text, type IconName } from '@/components/ui';
 import { useDiseases } from '@/hooks';
@@ -15,6 +16,13 @@ const look: Record<
   inconclusive: { tone: 'neutral', icon: 'info', card: 'default' },
   error: { tone: 'danger', icon: 'alert', card: 'danger' },
 };
+
+/** Words in place of a percentage on the main line; the percentage stays under Details. */
+export function matchLevel(score: number): 'matchHigh' | 'matchMid' | 'matchLow' {
+  if (score >= 0.8) return 'matchHigh';
+  if (score >= 0.6) return 'matchMid';
+  return 'matchLow';
+}
 
 /**
  * The four answers of a scan (FR-B04). "Suspected" is worded as a suspicion and the percentages are
@@ -40,6 +48,7 @@ export function ScanResultCard({
     const d = diseases.find((x) => x.code === code);
     return d?.names[locale] ?? d?.names.vi ?? d?.names.en ?? code;
   };
+  const [details, setDetails] = useState(false);
   const shown = state === 'error' ? [] : predictions.slice(0, 3);
   const title =
     state === 'suspected'
@@ -66,9 +75,6 @@ export function ScanResultCard({
         </Text>
         {shown.length > 0 ? (
           <View style={{ gap: spacing.xs }}>
-            <Text variant="caption" color="textMuted">
-              {t('result.score')}
-            </Text>
             <View
               testID="prediction-list"
               style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}
@@ -76,14 +82,37 @@ export function ScanResultCard({
               {shown.map((p, i) => (
                 <Badge
                   key={`${p.disease_code ?? 'none'}-${i}`}
-                  label={`${nameOf(p.disease_code)} ${Math.round(p.score * 100)}%`}
+                  label={`${nameOf(p.disease_code)} · ${t(`result.${matchLevel(p.score)}`)}`}
                   tone={i === 0 ? tone : 'neutral'}
                 />
               ))}
             </View>
-            <Text variant="caption" color="textMuted">
-              {t('result.scoreHint')}
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: details }}
+              onPress={() => setDetails((d) => !d)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44 }}
+            >
+              <Text variant="label" color="primary">
+                {t('result.details')}
+              </Text>
+              <Icon name={details ? 'chevronUp' : 'chevronDown'} size={18} color="primary" />
+            </Pressable>
+            {details ? (
+              <View style={{ gap: spacing.xs }}>
+                <Text variant="caption" color="textMuted">
+                  {t('result.score')}
+                </Text>
+                {shown.map((p, i) => (
+                  <Text key={`${p.disease_code ?? 'none'}-${i}`} variant="secondary">
+                    {`${nameOf(p.disease_code)}: ${Math.round(p.score * 100)}%`}
+                  </Text>
+                ))}
+                <Text variant="caption" color="textMuted">
+                  {t('result.scoreHint')}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>

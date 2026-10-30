@@ -52,7 +52,8 @@ export type RootStackParamList = {
   Standards: { market?: 'CN' | 'EU' } | undefined;
 
   // E, X. Directory, settings, account
-  Directory: undefined;
+  /** `province` opens the list filtered to that province when the pack has contacts there. */
+  Directory: { province?: string } | undefined;
   ContactDetail: { contactId: string };
   Settings: undefined;
   ScanSync: undefined;

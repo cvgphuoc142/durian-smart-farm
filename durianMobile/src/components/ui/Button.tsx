@@ -25,6 +25,8 @@ export interface ButtonProps {
   disabled?: boolean;
   /** Stretch to fill a row (`flex: 1`). */
   grow?: boolean;
+  /** Spoken name when it should say more than the visible label. */
+  accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -44,6 +46,7 @@ export function Button({
   loading = false,
   disabled = false,
   grow = false,
+  accessibilityLabel,
   style,
 }: ButtonProps) {
   const v = variants[variant];
@@ -51,7 +54,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       onPress={onPress}

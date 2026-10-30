@@ -18,3 +18,5 @@ export { ContentSyncHost } from './ContentSyncHost';
 export { ModelSyncHost } from './ModelSyncHost';
 export { ModelUpdateBanners, ModelUpdateCard } from './ModelUpdateBanner';
 export { useModelInstaller } from './ModelInstall';
+export { CallExpertButton } from './CallExpertButton';
+export { SeasonHeader } from './SeasonHeader';

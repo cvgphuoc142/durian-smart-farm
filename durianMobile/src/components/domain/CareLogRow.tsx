@@ -20,7 +20,10 @@ export function CareLogRow({
   return (
     <ListRow
       title={`${t(`careKinds.${log.kind}`)} · ${f.date(log.occurred_on)}`}
-      subtitle={[inputs, log.note].filter(Boolean).join(' · ') || undefined}
+      subtitle={
+        [log.case_id ? t('care.caseTreatment') : null, inputs, log.note].filter(Boolean).join(' · ') ||
+        undefined
+      }
       leading={{
         type: 'tile',
         icon: log.case_id ? 'bug' : 'leaf',
