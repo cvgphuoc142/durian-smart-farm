@@ -4,7 +4,6 @@ WORKDIR /srv
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
-COPY contract ./contract
 ENV PATH="/srv/.venv/bin:$PATH" PYTHONUNBUFFERED=1
 RUN useradd -r app && chown -R app /srv
 USER app
