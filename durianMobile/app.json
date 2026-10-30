@@ -66,7 +66,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.353834200795-82pgepighrng8kf3i76ul0krbim9no0e"
         }
-      ]
+      ],
+      "./plugins/with-pods-min-deployment-target"
     ]
   }
 }
