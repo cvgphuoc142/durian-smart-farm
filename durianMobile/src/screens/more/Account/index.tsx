@@ -6,6 +6,7 @@ import { SignOutDialog } from '@/components/domain';
 import {
   Button,
   Card,
+  ConfirmDialog,
   Header,
   InfoBanner,
   Screen,
@@ -13,17 +14,18 @@ import {
   Text,
   useToast,
 } from '@/components/ui';
-import { logout, useUnsyncedScanCount } from '@/hooks';
+import { deleteAccount, logout, useRequireOnline, useUnsyncedScanCount } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useAuthStore } from '@/stores/authStore';
 import { requestSync } from '@/sync';
 import { spacing } from '@/theme';
 
-type Dialog = 'signOut' | null;
+type Dialog = 'signOut' | 'delete' | null;
 
 /**
- * SC-27: who is signed in and sign out / switch account. Signing out with scans that never reached
- * the server offers to send them first (FR-X10).
+ * SC-27: who is signed in, sign out / switch account, and delete the account. Signing out with scans
+ * that never reached the server offers to send them first (FR-X10). Deleting needs the network and
+ * removes the account on the server and on this phone (FR-X09).
  */
 export function Account() {
   const { t } = useTranslation();
@@ -32,6 +34,8 @@ export function Account() {
   const user = useAuthStore((s) => s.user);
   const unsynced = useUnsyncedScanCount();
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { guard } = useRequireOnline();
 
   const close = () => setDialog(null);
 
@@ -45,6 +49,23 @@ export function Account() {
     void requestSync();
     toast.show(t('account.sendingScans'), 'info');
   };
+
+  const removeAccount = async () => {
+    close();
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      toast.show(t('account.deleted'), 'success');
+    } catch {
+      setDeleting(false);
+      toast.show(t('account.deleteFailed'), 'error');
+    }
+  };
+
+  const deleteBody =
+    unsynced > 0
+      ? `${t('account.deleteBody')} ${t('account.deleteUnsynced', { count: unsynced })}`
+      : t('account.deleteBody');
 
   const provider = user ? t(`account.${user.provider}`) : '';
 
@@ -80,6 +101,27 @@ export function Account() {
             style={{ marginTop: spacing.sm }}
           />
         </Section>
+
+        <Section title={t('account.delete')} flush>
+          <Button
+            label={t('account.delete')}
+            variant="danger"
+            icon="trash"
+            loading={deleting}
+            disabled={deleting}
+            onPress={guard(() => setDialog('delete'))}
+          />
+        </Section>
+
+        <ConfirmDialog
+          visible={dialog === 'delete'}
+          title={t('account.deleteTitle')}
+          message={deleteBody}
+          confirmLabel={t('account.deleteConfirm')}
+          destructive
+          onConfirm={() => void removeAccount()}
+          onCancel={close}
+        />
 
         <SignOutDialog
           visible={dialog === 'signOut'}

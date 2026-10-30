@@ -179,4 +179,28 @@ describe('SC-27: account (AC-17, AC-18)', () => {
     press(t('dialogs.signOut.syncFirst'));
     expect(useAuthStore.getState().token).not.toBeNull();
   });
+
+  it('deletes the account after confirmation and returns to sign-in (FR-X09)', async () => {
+    await start();
+    await openMore(t('more.account'));
+    await act(async () => {});
+    press(t('account.delete'));
+    await shown(t('account.deleteTitle'));
+    press(t('account.deleteConfirm'));
+    await screen.findByTestId('screen-SignIn');
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(db.tables.farm.size).toBe(0);
+    expect(useContextStore.getState().byUser['mock-user']).toBeUndefined();
+  });
+
+  it('offline it refuses to delete the account and says why', async () => {
+    await start();
+    mockOnline = false;
+    await openMore(t('more.account'));
+    await act(async () => {});
+    press(t('account.delete'));
+    await shown(t('errors.needsNetwork'));
+    expect(screen.queryAllByText(t('account.deleteTitle'))).toHaveLength(0);
+    expect(useAuthStore.getState().token).not.toBeNull();
+  });
 });

@@ -5,11 +5,26 @@
 export const ENABLED_LOCALES: readonly ('vi' | 'en')[] = ['vi'];
 export const DEFAULT_LOCALE: 'vi' | 'en' = 'vi';
 
-/** Base URL of the REST API. */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com';
+const PLACEHOLDER_API_URL = 'https://api.example.com';
 
-/** Serve the Phase 2 fixtures from an in-memory axios adapter instead of the real backend. */
-export const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK !== 'false';
+/** Base URL of the REST API. */
+export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? PLACEHOLDER_API_URL;
+
+/**
+ * Serve the Phase 2 fixtures from an in-memory axios adapter instead of the real backend.
+ * Development and tests only: a release build always talks to the real backend.
+ */
+export const USE_MOCK = __DEV__ && process.env.EXPO_PUBLIC_USE_MOCK !== 'false';
+
+// A release build without a real API URL would show an app that cannot sign in. Fail at start-up
+// so the broken build is caught before it reaches a store.
+if (!__DEV__ && API_URL === PLACEHOLDER_API_URL) {
+  throw new Error('EXPO_PUBLIC_API_URL is not set for this release build.');
+}
+
+/** Privacy policy and support pages, shown on sign-in and in Settings. Same URLs as the stores. */
+export const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
+export const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL;
 
 /**
  * Dev-only sign-in token for a real backend running with `APP_ENV=dev`: `dev:demo` is the seeded

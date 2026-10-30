@@ -67,6 +67,16 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
   isSuccessResponse: (r) => r?.type === 'success',
 }));
 
+// Sign in with Apple is iOS-only native code; tests render without the Apple button.
+jest.mock('expo-apple-authentication', () => ({
+  isAvailableAsync: jest.fn(async () => false),
+  signInAsync: jest.fn(),
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+  AppleAuthenticationButtonType: { SIGN_IN: 0, CONTINUE: 1 },
+  AppleAuthenticationButtonStyle: { WHITE: 0, WHITE_OUTLINE: 1, BLACK: 2 },
+  AppleAuthenticationButton: () => null,
+}));
+
 // Model files live on the phone's disk and push needs the OS; tests fake both.
 jest.mock('@/ai/modelFiles', () => ({
   modelFiles: {

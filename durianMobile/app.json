@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Durian Farm",
+    "name": "Sầu Riêng AI",
     "slug": "durianMobile",
     "scheme": "durian",
     "version": "1.0.0",
@@ -12,13 +12,15 @@
       "bundleIdentifier": "com.durianfarm.mobile",
       "infoPlist": {
         "NSCameraUsageDescription": "Ứng dụng cần dùng camera để chụp ảnh cây, lá, trái và nhận diện bệnh.",
-        "NSPhotoLibraryUsageDescription": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh cây trồng và hóa đơn."
-      }
+        "NSPhotoLibraryUsageDescription": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh lá, trái, thân cây và nhận diện bệnh.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.durianfarm.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1D5B3A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -33,7 +35,16 @@
       "expo-font",
       "expo-localization",
       "expo-secure-store",
-      "expo-splash-screen",
+      "expo-apple-authentication",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#1D5B3A"
+        }
+      ],
       [
         "expo-camera",
         {
@@ -43,7 +54,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh cây trồng và hóa đơn."
+          "photosPermission": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh lá, trái, thân cây và nhận diện bệnh."
         }
       ],
       "expo-notifications",

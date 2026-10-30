@@ -19,7 +19,7 @@ import {
   ToggleRow,
   useToast,
 } from '@/components/ui';
-import { ENABLED_LOCALES } from '@/config';
+import { ENABLED_LOCALES, PRIVACY_URL, SUPPORT_URL } from '@/config';
 import {
   useAiConsent,
   useChangeLocale,
@@ -31,6 +31,7 @@ import {
   useRequireOnline,
 } from '@/hooks';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
+import { openExternal } from '@/services/linking';
 import { spacing } from '@/theme';
 
 /**
@@ -93,6 +94,10 @@ export function Settings() {
       result === 'failed' || result === 'unsupported' ? 'error' : 'success',
     );
   });
+
+  const openLink = async (url: string | undefined) => {
+    if (!url || !(await openExternal(url))) toast.show(t('settings.linkFailed'), 'error');
+  };
 
   return (
     <Screen
@@ -206,6 +211,12 @@ export function Settings() {
               title={t('settings.version')}
               trailing={<Text color="textMuted">{Constants.expoConfig?.version ?? '—'}</Text>}
             />
+            {PRIVACY_URL ? (
+              <ListRow title={t('settings.privacy')} onPress={() => void openLink(PRIVACY_URL)} />
+            ) : null}
+            {SUPPORT_URL ? (
+              <ListRow title={t('settings.support')} onPress={() => void openLink(SUPPORT_URL)} />
+            ) : null}
           </ListGroup>
         </Section>
       </View>
