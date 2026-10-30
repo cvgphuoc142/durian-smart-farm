@@ -163,7 +163,8 @@ export function ScanResult() {
           label={t('result.askAssistant')}
           onPress={() =>
             nav.navigate('Chatbot', {
-              caseId: scan.new_case?.id ?? scan.case_id ?? undefined,
+              // A case made with this scan exists on the server only once the scan is synced.
+              caseId: (scan.meta_done ? scan.new_case?.id : undefined) ?? scan.case_id ?? undefined,
               prefill: t(scan.label_snapshot ? 'result.askPrefill' : 'result.askPrefillNoLabel', {
                 label: scan.label_snapshot,
               }),

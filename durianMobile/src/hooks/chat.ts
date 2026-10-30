@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 
-import { authApi, chatApi } from '@/api';
+import { ApiRequestError, authApi, chatApi } from '@/api';
 import { newId } from '@/api/ids';
 import { AI_CONSENT_VERSION } from '@/config';
 import { contentRepo } from '@/db';
@@ -73,13 +73,20 @@ export function useAsk() {
       const history = ((userId && store.byUser[userId]) || [])
         .slice(-HISTORY_TURNS)
         .map((m) => ({ role: m.role, text: m.text }));
-      const response: ChatResponse = await chatApi.ask({
+      const request = {
         question,
         locale,
         season_id: season?.id,
         case_id: caseId,
         history,
         client_last_synced_at: asOf,
+      };
+      const response: ChatResponse = await chatApi.ask(request).catch((err: unknown) => {
+        // A case or season made on this phone is unknown to the server until it syncs. The
+        // refusal comes before the AI call, so ask again without that context.
+        const field = err instanceof ApiRequestError && err.code === 'not_found' ? err.field : null;
+        if (field !== 'case_id' && field !== 'season_id') throw err;
+        return chatApi.ask({ ...request, case_id: undefined, season_id: undefined });
       });
       const now = new Date().toISOString();
       store.add({ id: newId(), role: 'user', text: question, created_at: now });

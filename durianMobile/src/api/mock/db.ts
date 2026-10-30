@@ -46,7 +46,7 @@ function create() {
       /** Every request fails as offline. */
       offline: false,
       /** Make the next requests fail with this status once each, e.g. 503. */
-      failWith: [] as { status: number; code: string }[],
+      failWith: [] as { status: number; code: string; field?: string }[],
     },
     clock: () => new Date().toISOString(),
   };

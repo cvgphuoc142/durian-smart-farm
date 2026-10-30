@@ -197,8 +197,8 @@ export const mockAdapter: AxiosAdapter = async (config: InternalAxiosRequestConf
   const path = (config.url ?? '').replace(/^https?:\/\/[^/]+/, '').split('?')[0];
   const requestId = String(config.headers.get('X-Request-Id') ?? '');
 
-  const fail = (status: number, code: string, retryable = false) => {
-    const data = { request_id: requestId, code, message: code, retryable };
+  const fail = (status: number, code: string, retryable = false, field?: string) => {
+    const data = { request_id: requestId, code, message: code, retryable, field };
     const response = { data, status, statusText: code, headers: {}, config };
     return new AxiosError(code, code, config, null, response);
   };
@@ -206,7 +206,12 @@ export const mockAdapter: AxiosAdapter = async (config: InternalAxiosRequestConf
   if (db.sim.offline) throw new AxiosError('Network Error', 'ERR_NETWORK', config);
   const injected = db.sim.failWith.shift();
   if (injected)
-    throw fail(injected.status, injected.code, injected.status === 503 || injected.status === 429);
+    throw fail(
+      injected.status,
+      injected.code,
+      injected.status === 503 || injected.status === 429,
+      injected.field,
+    );
 
   for (const [m, pattern, handler] of routes) {
     if (m !== method) continue;

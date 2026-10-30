@@ -200,6 +200,20 @@ describe('SC-19, SC-20: chatbot (AC-13, AC-14, AC-24)', () => {
     expect(ask).toHaveBeenCalledTimes(2);
   });
 
+  it('a case the server does not have yet is dropped from the context instead of failing', async () => {
+    const ask = jest.spyOn(chatApi, 'ask');
+    await start();
+    db.preferences = { ...db.preferences, ai_consent_version: 1 };
+    await openChat();
+    await screen.findByLabelText(t('chat.send'));
+    db.sim.failWith.push({ status: 404, code: 'not_found', field: 'case_id' });
+    fireEvent.changeText(label(t('chat.input')), 'xi mu');
+    fireEvent.press(label(t('chat.send')));
+    await screen.findByLabelText(t('chat.sources'));
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[1][0]).toMatchObject({ case_id: undefined, season_id: undefined });
+  });
+
   it('reports an answer: shows what is sent, sends once per confirmation', async () => {
     const report = jest.spyOn(chatApi, 'report');
     await start();
