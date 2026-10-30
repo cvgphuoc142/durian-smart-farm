@@ -228,7 +228,7 @@ export function AddCareLog() {
     { id: '', label: t('care.noCase') },
     ...cases
       .filter((c) => c.season_id === season?.id && (!c.closed_at || c.id === editing?.case_id))
-      .map((c) => ({ id: c.id, label: `${t('care.case')} ${f.date(c.opened_at.slice(0, 10))}` })),
+      .map((c) => ({ id: c.id, label: `${t('care.case')} ${f.date(c.opened_at)}` })),
   ];
 
   return (

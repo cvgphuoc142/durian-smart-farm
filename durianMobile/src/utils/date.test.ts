@@ -14,3 +14,10 @@ describe('Asia/Ho_Chi_Minh dates', () => {
     expect(formatDate('2026-01-31')).toBe('31/01/2026');
   });
 });
+
+describe('formatDate with a timestamp', () => {
+  it('shows the Vietnam day of a UTC instant, never the raw ISO string', () => {
+    expect(formatDate('2026-10-30T07:18:47.593000Z')).toBe('30/10/2026');
+    expect(formatDate('2026-10-30T18:00:00Z')).toBe('31/10/2026');
+  });
+});

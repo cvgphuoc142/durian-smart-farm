@@ -57,12 +57,18 @@ describe('SC-17, SC-18: knowledge and article (AC-07, AC-23)', () => {
     await shown('Bệnh xì mủ (mẫu)');
     await shown('Thối trái (mẫu)');
 
+    // The search waits for typing to pause, then queries the phone's database; on a busy test
+    // machine that takes longer than waitFor's default second.
+    const slow = { timeout: 5000 };
     fireEvent.changeText(label(t('common.search')), 'xi mu');
-    await waitFor(() => expect(screen.queryAllByText('Thối trái (mẫu)')).toHaveLength(0));
+    await waitFor(() => expect(screen.queryAllByText('Thối trái (mẫu)')).toHaveLength(0), slow);
     await shown('Bệnh xì mủ (mẫu)');
 
     fireEvent.changeText(label(t('common.search')), 'khong co bai nay');
-    await shown(t('knowledge.noMatchTitle'));
+    await waitFor(
+      () => expect(screen.getAllByText(t('knowledge.noMatchTitle')).length).toBeGreaterThan(0),
+      slow,
+    );
   });
 
   it('opens an article with its sources and version date', async () => {
@@ -88,9 +94,13 @@ describe('SC-17, SC-18: knowledge and article (AC-07, AC-23)', () => {
     await start();
     // Pack present, but a search matches nothing and nothing was published for a filter.
     await openLookup();
-    fireEvent.press(screen.getAllByText('Bệnh hại').at(-1)!);
+    // The filter chip comes before the article rows, whose subtitle shows the same category.
+    fireEvent.press(screen.getAllByText('Bệnh hại')[0]);
     fireEvent.changeText(label(t('common.search')), 'phan');
-    await shown(t('knowledge.noMatchTitle'));
+    await waitFor(
+      () => expect(screen.getAllByText(t('knowledge.noMatchTitle')).length).toBeGreaterThan(0),
+      { timeout: 5000 },
+    );
   });
 });
 

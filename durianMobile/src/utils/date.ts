@@ -25,9 +25,13 @@ export function fromDateString(value: DateString): Date {
   return new Date(y, m - 1, d, 12);
 }
 
-/** `2026-10-14` → `14/10/2026`. Accepts a `Date` (its local day) for the date picker. */
-export function formatDate(value: DateString | Date): string {
-  const s = typeof value === 'string' ? value : toDateString(value);
+/**
+ * `2026-10-14` → `14/10/2026`. Accepts a `Date` (its local day) for the date picker, and a UTC
+ * instant such as `opened_at` (the Vietnam day it falls on).
+ */
+export function formatDate(value: DateString | Timestamp | Date): string {
+  const s =
+    typeof value !== 'string' ? toDateString(value) : value.length > 10 ? dateOf(value) : value;
   const [y, m, d] = s.split('-');
   return `${d}/${m}/${y}`;
 }
