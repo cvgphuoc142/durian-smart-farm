@@ -172,7 +172,12 @@ export function SeasonOverview() {
                 accessibilityRole="button"
                 accessibilityState={{ expanded: forecastOpen }}
                 onPress={() => setForecastOpen((o) => !o)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.sm,
+                  minHeight: 44,
+                }}
               >
                 <Text variant="bodyStrong" style={{ flex: 1 }}>
                   {forecast?.profit
@@ -189,7 +194,9 @@ export function SeasonOverview() {
                     items={[
                       {
                         label: t('overview.forecastYield'),
-                        value: season.forecast_yield_kg ? f.kg(season.forecast_yield_kg) : noForecast,
+                        value: season.forecast_yield_kg
+                          ? f.kg(season.forecast_yield_kg)
+                          : noForecast,
                       },
                       {
                         label: t('overview.forecastPrice'),

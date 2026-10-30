@@ -155,7 +155,6 @@ describe('SC-25: settings (AC-21, AC-22)', () => {
     await shown(t('errors.needsNetwork'));
     expect(db.preferences.ai_consent_version).toBeNull();
   });
-
 });
 
 describe('SC-27: account (AC-17, AC-18)', () => {
