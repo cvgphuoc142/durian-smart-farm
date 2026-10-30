@@ -519,6 +519,10 @@
     "sources": "Nguồn",
     "report": "Báo cáo câu trả lời",
     "failed": "Chưa gửi được câu hỏi",
+    "reset": "Cuộc trò chuyện mới",
+    "resetTitle": "Xóa lịch sử chat?",
+    "resetMessage": "Toàn bộ câu hỏi và câu trả lời trong cuộc trò chuyện này sẽ bị xóa khỏi máy. Việc này không hoàn tác được.",
+    "resetConfirm": "Xóa lịch sử",
     "searchResults": "Bài tìm được"
   },
   "report": {

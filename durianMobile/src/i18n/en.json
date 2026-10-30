@@ -519,6 +519,10 @@
     "sources": "Sources",
     "report": "Report this answer",
     "failed": "The question was not sent",
+    "reset": "New conversation",
+    "resetTitle": "Clear chat history?",
+    "resetMessage": "All questions and answers in this conversation will be removed from this phone. This cannot be undone.",
+    "resetConfirm": "Clear history",
     "searchResults": "Articles found"
   },
   "report": {

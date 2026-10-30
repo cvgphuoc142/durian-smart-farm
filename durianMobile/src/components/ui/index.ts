@@ -5,6 +5,7 @@ export { Screen, ScreenRefreshProvider, type ScreenProps } from './Screen';
 export { Header, type HeaderProps } from './Header';
 export { Section, type SectionProps } from './Section';
 export { Divider } from './Divider';
+export { Markdown, type MarkdownProps } from './Markdown';
 
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { IconButton, type IconButtonProps } from './IconButton';

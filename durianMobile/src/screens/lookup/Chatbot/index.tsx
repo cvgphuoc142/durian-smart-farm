@@ -8,10 +8,13 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   Icon,
   Header,
+  IconButton,
   ListGroup,
+  Markdown,
   Screen,
   Text,
   TextInput,
@@ -21,7 +24,7 @@ import { useAiConsent, useApiErrorMessage, useArticleList, useAsk } from '@/hook
 import type { RootStackParamList } from '@/navigation/types';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { openExternal } from '@/services';
-import { useChatMessages } from '@/stores';
+import { useChatMessages, useChatStore } from '@/stores';
 import { getDraft, useDraftStore } from '@/stores/draftStore';
 import { colors, radius, spacing } from '@/theme';
 import type { Citation } from '@/types';
@@ -65,6 +68,7 @@ export function Chatbot() {
   const [pending, setPending] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ question: string; message: string } | null>(null);
   const [searched, setSearched] = useState('');
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const canAsk = ask.online && consent.consented;
   const results = useArticleList({ text: searched });
@@ -148,7 +152,23 @@ export function Chatbot() {
   return (
     <Screen
       scrollRef={scroller}
-      header={<Header title={t('screens.Chatbot')} variant="back" onBack={() => nav.goBack()} />}
+      header={
+        <Header
+          title={t('screens.Chatbot')}
+          variant="back"
+          onBack={() => nav.goBack()}
+          right={
+            messages.length > 0 ? (
+              <IconButton
+                icon="trash"
+                variant="outline"
+                accessibilityLabel={t('chat.reset')}
+                onPress={() => setConfirmReset(true)}
+              />
+            ) : undefined
+          }
+        />
+      }
       footer={
         <TextInput
           value={question}
@@ -221,7 +241,7 @@ export function Chatbot() {
                 {m.response?.status === 'insufficient_sources' ? (
                   <Badge label={t('chat.insufficient')} tone="warning" icon="alert" />
                 ) : null}
-                <Text variant="body">{m.text || t('chat.noAnswer')}</Text>
+                <Markdown>{m.text || t('chat.noAnswer')}</Markdown>
                 {m.response && m.response.citations.length > 0 ? (
                   <Sources
                     citations={m.response.citations}
@@ -274,6 +294,20 @@ export function Chatbot() {
             </View>
           </Card>
         ) : null}
+
+        <ConfirmDialog
+          visible={confirmReset}
+          title={t('chat.resetTitle')}
+          message={t('chat.resetMessage')}
+          confirmLabel={t('chat.resetConfirm')}
+          destructive
+          onCancel={() => setConfirmReset(false)}
+          onConfirm={() => {
+            setConfirmReset(false);
+            useChatStore.getState().reset();
+            setFailed(null);
+          }}
+        />
 
         {!canAsk && searched.trim() ? (
           <View style={{ gap: spacing.sm }}>

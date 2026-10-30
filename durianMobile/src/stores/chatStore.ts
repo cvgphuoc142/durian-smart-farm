@@ -8,6 +8,8 @@ interface ChatState {
   /** `userId` → the conversation of this session. Kept in memory only: nothing of it is stored. */
   byUser: Record<string, ChatMessage[]>;
   add: (message: ChatMessage) => void;
+  /** Drops the signed-in account's conversation. */
+  reset: () => void;
   clear: () => void;
 }
 
@@ -20,6 +22,13 @@ export const useChatStore = create<ChatState>()((set) => ({
     if (!userId) return;
     set((s) => ({ byUser: { ...s.byUser, [userId]: [...(s.byUser[userId] ?? NONE), message] } }));
   },
+  reset: () =>
+    set((s) => {
+      const userId = currentUserId();
+      if (!userId) return s;
+      const { [userId]: _dropped, ...rest } = s.byUser;
+      return { byUser: rest };
+    }),
   clear: () => set({ byUser: {} }),
 }));
 

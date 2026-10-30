@@ -11,6 +11,7 @@ import {
   InfoBanner,
   ListGroup,
   ListRow,
+  Markdown,
   Screen,
   Skeleton,
   Text,
@@ -109,13 +110,7 @@ export function Article() {
           />
         ) : null}
 
-        <View style={{ gap: spacing.md }}>
-          {article.body.split(/\n{2,}/).map((p, i) => (
-            <Text key={i} variant="body">
-              {p}
-            </Text>
-          ))}
-        </View>
+        <Markdown>{article.body}</Markdown>
 
         <View style={{ gap: spacing.sm }}>
           <Text variant="heading" accessibilityRole="header">
