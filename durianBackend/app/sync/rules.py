@@ -121,8 +121,10 @@ async def season_on_delete(ctx: TxContext, row: Row) -> None:
             ("care_log", "season_id"),
             ("expense", "season_id"),
             ("sale", "season_id"),
+            ("disease_case", "season_id"),
+            ("scan", "season_id"),
+            ("self_check", "season_id"),
         ],
-        raw=[("disease_cases", "season_id"), ("scans", "season_id"), ("self_checks", "season_id")],
     )
 
 
@@ -256,6 +258,32 @@ async def scan_validate(ctx: TxContext, id: UUID, m: Any, existing: Row | None) 
     return {}
 
 
+# --- self check ----------------------------------------------------------------------
+
+
+async def self_check_validate(ctx: TxContext, id: UUID, m: Any, existing: Row | None) -> Row:
+    await _parent(ctx, "season", m.season_id, "season_id")
+    if existing is not None and (
+        existing["season_id"] != m.season_id
+        or existing["standard_version_id"] != m.standard_version_id
+    ):
+        ctx.reject(ErrorCode.validation_failed, "data.standard_version_id")
+    version = await ctx.repos.db["standard_versions"].find_one(
+        {"_id": m.standard_version_id}, {"items.id": 1}, session=ctx.repos.session
+    )
+    if version is None:
+        ctx.reject(ErrorCode.parent_not_found, "data.standard_version_id")
+    known = {UUID(str(i["id"])) for i in version.get("items", [])}
+    seen: set[UUID] = set()
+    for n, a in enumerate(m.answers):
+        if a.standard_item_id not in known:
+            ctx.reject(ErrorCode.item_not_in_version, f"data.answers.{n}.standard_item_id")
+        if a.standard_item_id in seen:
+            ctx.reject(ErrorCode.validation_failed, f"data.answers.{n}.standard_item_id")
+        seen.add(a.standard_item_id)
+    return {}
+
+
 RULES: dict[str, EntityRules] = {
     "farm": EntityRules(farm_validate, farm_on_delete),
     "plot": EntityRules(plot_validate, plot_on_delete),
@@ -266,4 +294,5 @@ RULES: dict[str, EntityRules] = {
     "sale_payment": EntityRules(sale_payment_validate, sale_payment_on_delete),
     "disease_case": EntityRules(disease_case_validate, disease_case_on_delete),
     "scan": EntityRules(scan_validate, _no_delete_rule),
+    "self_check": EntityRules(self_check_validate, _no_delete_rule),
 }

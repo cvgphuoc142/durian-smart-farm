@@ -39,6 +39,43 @@ def sid(name: str) -> str:
     return str(uuid.uuid5(_NS, name))
 
 
+def cid(name: str) -> uuid.UUID:
+    """`sid` as a real UUID: content collections key rows by BSON UUID, like the admin API does."""
+    return uuid.UUID(sid(name))
+
+
+def _as_uuid(value: Any) -> Any:
+    return uuid.UUID(value) if isinstance(value, str) else value
+
+
+async def rekey_string_ids(db) -> None:  # type: ignore[no-untyped-def]
+    """Older seeds stored content ids as strings, which no UUID query (sync rules, admin) can match.
+    Re-insert those rows under a UUID `_id` and turn their id references into UUIDs too."""
+    refs = {
+        "article_versions": ("article_id",),
+        "knowledge_articles": ("latest_version_id", "published_version_id"),
+        "standard_profiles": ("published_version_id",),
+        "standard_versions": ("standard_profile_id",),
+        "directory_contacts": (),
+    }
+    for name, fields in refs.items():
+        coll = db[name]
+        async for doc in coll.find({"_id": {"$type": "string"}}):
+            old = doc["_id"]
+            doc["_id"] = _as_uuid(old)
+            for f in fields:
+                if f in doc:
+                    doc[f] = _as_uuid(doc[f])
+            for item in doc.get("items", []):
+                for f in ("id", "standard_version_id"):
+                    item[f] = _as_uuid(item[f])
+            await coll.delete_one({"_id": old})  # first: unique indexes would reject the copy
+            await coll.insert_one(doc)
+        for f in fields:
+            async for doc in coll.find({f: {"$type": "string"}}, {f: 1}):
+                await coll.update_one({"_id": doc["_id"]}, {"$set": {f: _as_uuid(doc[f])}})
+
+
 def up(entity: str, name: str, data: dict[str, Any], rev: int | None = None) -> dict[str, Any]:
     return {
         "entity": entity,
@@ -322,8 +359,9 @@ async def seed_content(db, dev: bool) -> None:  # type: ignore[no-untyped-def]
     one chat report. Rows have fixed ids, so re-running updates them in place; a new content
     release is cut only when what is published changed."""
     now = utcnow_ms()
+    await rekey_string_ids(db)
     for a in ARTICLES:
-        article_id, version_id = sid(f"article:{a['key']}"), sid(f"article-v:{a['key']}")
+        article_id, version_id = cid(f"article:{a['key']}"), cid(f"article-v:{a['key']}")
         fields = {k: v for k, v in a.items() if k != "key"}
         await db["article_versions"].update_one(
             {"_id": version_id},
@@ -368,10 +406,10 @@ async def seed_content(db, dev: bool) -> None:  # type: ignore[no-untyped-def]
             upsert=True,
             return_document=True,
         )
-        version_id = sid(f"standard-v:{market}")
+        version_id = cid(f"standard-v:{market}")
         items = [
             {
-                "id": sid(f"standard-item:{market}:{key}"),
+                "id": cid(f"standard-item:{market}:{key}"),
                 "standard_version_id": version_id,
                 "item_key": key,
                 "title": title,
@@ -412,7 +450,7 @@ async def seed_content(db, dev: bool) -> None:  # type: ignore[no-untyped-def]
     for c in CONTACTS:
         fields = {k: v for k, v in c.items() if k != "key"}
         await db["directory_contacts"].update_one(
-            {"_id": sid(f"contact:{c['key']}")},
+            {"_id": cid(f"contact:{c['key']}")},
             {
                 "$set": {
                     "status": "published",

@@ -16,6 +16,7 @@ from app.sync.rules import RULES
 _INDEX_CODES = {
     "plot_name_live": (ErrorCode.duplicate_plot_name, "data.name"),
     "one_open_season_per_plot": (ErrorCode.open_season_exists, "data.plot_id"),
+    "self_check_live": (ErrorCode.validation_failed, "data.standard_version_id"),
     "expense_care_log_live": (ErrorCode.expense_link_taken, "data.care_log_id"),
 }
 
@@ -55,7 +56,6 @@ def _reject_duplicate(ctx: TxContext, exc: DuplicateKeyError) -> None:
 async def apply_op(ctx: TxContext, op: Op) -> None:
     spec = SPECS.get(op.entity)
     if spec is None:
-        # self_check sync is not implemented yet.
         ctx.reject(ErrorCode.validation_failed, "entity")
     if op.op == "delete":
         await _delete(ctx, spec, op)

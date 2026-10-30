@@ -118,6 +118,7 @@ async def snapshot(
         "sale_payments": await repos["sale_payment"].all(),
         "disease_cases": await repos["disease_case"].all(),
         "scans": await repos["scan"].all(),
+        "self_checks": await repos["self_check"].all(),
         "media_assets": [
             wire(d)
             async for d in db["media_assets"].find({"owner_id": user.id}).sort("created_at", 1)

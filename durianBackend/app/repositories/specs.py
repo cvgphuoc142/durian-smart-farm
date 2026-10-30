@@ -85,8 +85,15 @@ SCAN = EntitySpec(
     e.ScanRow,
     parents=("season_id", "case_id", "photo_id"),
 )
+SELF_CHECK = EntitySpec(
+    "self_check",
+    "self_checks",
+    e.SelfCheckCreate,
+    e.SelfCheckRow,
+    parents=("season_id",),
+)
 
 SPECS: dict[str, EntitySpec] = {
     s.name: s
-    for s in (FARM, PLOT, SEASON, CARE_LOG, EXPENSE, SALE, SALE_PAYMENT, DISEASE_CASE, SCAN)
+    for s in (FARM, PLOT, SEASON, CARE_LOG, EXPENSE, SALE, SALE_PAYMENT, DISEASE_CASE, SCAN, SELF_CHECK)
 }

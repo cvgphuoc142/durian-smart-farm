@@ -142,6 +142,18 @@ class DiseaseCaseCreate(_Strict):
     note: str | None = None
 
 
+class SelfCheckAnswerWrite(_Strict):
+    standard_item_id: UUID
+    checked: bool
+    checked_at: datetime | None = None
+
+
+class SelfCheckCreate(_Strict):
+    season_id: UUID
+    standard_version_id: UUID
+    answers: list[SelfCheckAnswerWrite]
+
+
 class PredictionWrite(_Strict):
     disease_code: str | None
     score: Score
@@ -227,3 +239,4 @@ SaleRow = _row("Sale", SaleCreate)
 SalePaymentRow = _row("SalePayment", SalePaymentCreate)
 DiseaseCaseRow = _row("DiseaseCase", DiseaseCaseCreate)
 ScanRow = _row("Scan", ScanCreate)
+SelfCheckRow = _row("SelfCheck", SelfCheckCreate)

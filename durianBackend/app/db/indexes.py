@@ -20,6 +20,14 @@ INDEXES: dict[str, list[IndexModel]] = {
             partialFilterExpression=_LIVE,
         )
     ],
+    "self_checks": [
+        IndexModel(
+            [("season_id", ASCENDING), ("standard_version_id", ASCENDING)],
+            name="self_check_live",
+            unique=True,
+            partialFilterExpression=_LIVE,
+        )
+    ],
     "farms": [IndexModel([("owner_id", ASCENDING)])],
     "plots": [
         IndexModel([("owner_id", ASCENDING), ("farm_id", ASCENDING)]),

@@ -15,6 +15,7 @@ from app.schemas.entities import (
     SalePaymentRow,
     SaleRow,
     ScanRow,
+    SelfCheckRow,
     SeasonRow,
 )
 
@@ -81,5 +82,4 @@ class Snapshot(BaseModel):
     disease_cases: list[DiseaseCaseRow]  # type: ignore[valid-type]
     media_assets: list[dict[str, Any]]
     scans: list[ScanRow]  # type: ignore[valid-type]
-    # Not implemented yet: present but empty.
-    self_checks: list[dict[str, Any]] = Field(default_factory=list)
+    self_checks: list[SelfCheckRow]  # type: ignore[valid-type]

@@ -330,7 +330,7 @@ def test_in_order_parent_then_child_in_one_request(api: TestClient) -> None:
     assert [r["status"] for r in results] == ["applied", "applied"]
 
 
-def test_self_check_is_not_synced_yet(api: TestClient) -> None:
+def test_self_check_needs_a_known_standard_version(api: TestClient) -> None:
     f = Farmer(api)
     ids = setup_garden(f)
     r = f.one(
@@ -340,7 +340,36 @@ def test_self_check_is_not_synced_yet(api: TestClient) -> None:
             {"season_id": ids["season"], "standard_version_id": uid(), "answers": []},
         )
     )
-    rejected(r, "validation_failed", "ops.0.entity")
+    rejected(r, "parent_not_found", "ops.0.data.standard_version_id")
+
+
+def test_self_check_tick_and_untick(api: TestClient, replset_uri: str) -> None:
+    import uuid
+
+    from pymongo import MongoClient
+
+    f = Farmer(api)
+    ids = setup_garden(f)
+    version, item1, item2 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    raw = MongoClient(replset_uri, uuidRepresentation="standard")[api.app.state.db.name]
+    raw["standard_versions"].insert_one(
+        {
+            "_id": version,
+            "status": "published",
+            "items": [{"id": item1, "sort_order": 1}, {"id": item2, "sort_order": 2}],
+        }
+    )
+    sc = uid()
+    tick = {"standard_item_id": str(item1), "checked": True, "checked_at": "2026-10-30T01:02:03.000Z"}
+    data = {"season_id": ids["season"], "standard_version_id": str(version), "answers": [tick]}
+    row = f.rows(f.ok(upsert("self_check", sc, data)))[0]
+    assert row["revision"] == 1 and row["answers"][0]["checked"] is True
+    more = [*row["answers"], {"standard_item_id": str(item2), "checked": False, "checked_at": None}]
+    row = f.rows(f.ok(upsert("self_check", sc, {"answers": more}, rev=1)))[0]
+    assert row["revision"] == 2 and len(row["answers"]) == 2
+    assert [x["id"] for x in f.snapshot()["self_checks"]] == [sc]
+    bad = {"standard_item_id": uid(), "checked": True, "checked_at": None}
+    rejected(f.one(upsert("self_check", sc, {"answers": [bad]}, rev=2)), "item_not_in_version")
 
 
 def test_malformed_request_is_http_422_with_error_shape(api: TestClient) -> None:
