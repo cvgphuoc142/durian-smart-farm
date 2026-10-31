@@ -62,6 +62,7 @@ if [ ! -f "$OUT/index.html" ]; then
       cp -a /src /build && cd /build && rm -rf node_modules dist
       npm ci --no-audit --no-fund && npm run build && cp -a dist/. /out/'
   [ -f "$OUT.tmp/privacy/index.html" ] || die "admin build has no privacy page"
+  [ -f "$OUT.tmp/support/index.html" ] || die "admin build has no support page"
   mv "$OUT.tmp" "$OUT"
 fi
 
@@ -104,8 +105,10 @@ systemctl enable --now saurieng-backup.timer >/dev/null
 # --- Smoke test through nginx
 if [ "$CONF" = saurieng-ai.conf ]; then
   curl -fsS "https://$API_DOMAIN/readyz" >/dev/null || die "https api smoke failed"
-  curl -fsS -o /dev/null "https://$ADMIN_DOMAIN/" || die "https admin smoke failed"
+  curl -fsS -o /dev/null "https://$ADMIN_DOMAIN/" || die "https website smoke failed"
+  curl -fsS -o /dev/null "https://$ADMIN_DOMAIN/admin/" || die "https admin smoke failed"
   curl -fsS -o /dev/null "https://$ADMIN_DOMAIN/privacy/" || die "https privacy smoke failed"
+  curl -fsS -o /dev/null "https://$ADMIN_DOMAIN/support/" || die "https support smoke failed"
   curl -fsS -o /dev/null "https://$MEDIA_DOMAIN/minio/health/live" || die "https media smoke failed"
 else
   log "no certificate yet: HTTPS smoke skipped (see docs, certbot step)"

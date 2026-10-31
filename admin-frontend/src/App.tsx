@@ -7,6 +7,7 @@ import { Contacts } from './pages/Contacts';
 import { ChatReports } from './pages/ChatReports';
 import { Models } from './pages/Models';
 import { Icons } from './icons';
+import './styles.css';
 
 const TABS = {
   articles: ['Articles', Articles],
