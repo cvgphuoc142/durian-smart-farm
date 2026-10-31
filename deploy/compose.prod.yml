@@ -9,7 +9,9 @@ x-logging: &logging
 services:
   # Single-node replica set: the API needs transactions.
   mongo:
-    image: mongo:7
+    # 4.4 on purpose: MongoDB 5.0+ needs a CPU with AVX and this VPS has none. The API only
+    # uses basic operators and transactions, which 4.4 supports. Check AVX before upgrading.
+    image: mongo:4.4
     # Small VPS (2 GB RAM): cap the WiredTiger cache instead of the default half of RAM.
     command: ["--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
     volumes: ["mongo_data:/data/db"]
@@ -20,9 +22,9 @@ services:
       test:
         - CMD-SHELL
         - >
-          mongosh --quiet --eval "try { rs.status().ok } catch (e) {
+          mongo --quiet --eval "try { rs.status().ok } catch (e) {
           rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"
-          && mongosh --quiet --eval "if (!db.hello().isWritablePrimary) quit(1)"
+          && mongo --quiet --eval "if (!db.isMaster().ismaster) quit(1)"
       interval: 5s
       timeout: 10s
       retries: 30
@@ -71,4 +73,5 @@ services:
 volumes:
   mongo_data: {name: saurieng_ai_mongo_data}
   qdrant_data: {name: saurieng_ai_qdrant_data}
-  minio_data: {name: saurieng_ai_minio_data}
+  # Created by deploy.sh first so it can be chowned to the MinIO user.
+  minio_data: {name: saurieng_ai_minio_data, external: true}
