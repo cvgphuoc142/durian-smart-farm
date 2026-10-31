@@ -30,8 +30,10 @@ dc() {
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
-# Name the failing command when `set -e` stops a script.
-trap 'log "ERROR: \"$BASH_COMMAND\" failed (exit $?) at ${BASH_SOURCE[0]}:$LINENO" >&2' ERR
+# Name the failing command when `set -e` stops a script (not in a shell that sources this).
+if [[ $- == *e* ]]; then
+  trap 'log "ERROR: \"$BASH_COMMAND\" failed (exit $?) at ${BASH_SOURCE[0]}:$LINENO" >&2' ERR
+fi
 
 # nginx on Debian/Ubuntu reads sites-enabled; other layouts read conf.d.
 nginx_site_path() {
