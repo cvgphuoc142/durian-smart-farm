@@ -1,5 +1,6 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import "./landing.css";
+import { AiSpotlight, ProductDifference } from "./product-story";
 
 type IconName =
   | "leaf"
@@ -15,6 +16,8 @@ type IconName =
   | "arrow"
   | "download"
   | "phone"
+  | "menu"
+  | "close"
   | "layers";
 const paths: Record<IconName, ReactNode> = {
   leaf: (
@@ -75,6 +78,8 @@ const paths: Record<IconName, ReactNode> = {
       <path d="M10 5h4M11 19h2" />
     </>
   ),
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  close: <path d="m6 6 12 12M18 6 6 18" />,
   layers: (
     <>
       <path d="m12 3 10 5-10 5L2 8l10-5ZM2 13l10 5 10-5M2 18l10 5 10-5" />
@@ -110,11 +115,15 @@ const stages: {
   icon: IconName;
   headline: string;
   description: string;
+  image: string;
+  imageAlt: string;
   tools: string[];
 }[] = [
   {
     name: "Phục hồi cây",
     icon: "leaf",
+    image: "season-recovery",
+    imageAlt: "Minh họa đọt lá mới và nhà vườn kiểm tra cây sau thu hoạch",
     headline: "Khởi đầu từ chính khu vườn.",
     description:
       "Tạo vườn, chia lô, mở vụ. Ghi lại từng việc chăm cây để có điểm bắt đầu rõ ràng.",
@@ -123,6 +132,8 @@ const stages: {
   {
     name: "Ra hoa",
     icon: "flower",
+    image: "season-flowering",
+    imageAlt: "Minh họa chùm hoa sầu riêng mọc trên cành gỗ",
     headline: "Hiểu cây ở từng giai đoạn.",
     description:
       "Tra cứu kiến thức theo giai đoạn, hỏi đáp khi cần và lưu lại những việc đã làm.",
@@ -131,6 +142,8 @@ const stages: {
   {
     name: "Đậu trái",
     icon: "fruit",
+    image: "season-fruit-set",
+    imageAlt: "Minh họa những trái sầu riêng non vừa hình thành trên cành",
     headline: "Theo sát từng thay đổi.",
     description:
       "Ghi hoạt động chăm sóc, quét ảnh khi thấy dấu hiệu bất thường và theo dõi ca bệnh trong vụ.",
@@ -139,6 +152,8 @@ const stages: {
   {
     name: "Nuôi trái",
     icon: "layers",
+    image: "durian-orchard",
+    imageAlt: "Minh họa nhà vườn theo dõi sầu riêng trong giai đoạn nuôi trái",
     headline: "Chăm cây, nắm cả chi phí.",
     description:
       "Gắn công chăm sóc với vật tư và khoản chi. Tra cứu checklist tiêu chuẩn để tự đối chiếu.",
@@ -147,6 +162,8 @@ const stages: {
   {
     name: "Thu hoạch",
     icon: "basket",
+    image: "season-harvest",
+    imageAlt: "Minh họa nhà vườn phân loại sầu riêng trong ngày thu hoạch",
     headline: "Rõ chuyện bán, sát dòng tiền.",
     description:
       "Ghi giao dịch bán, tiền cọc và khoản đã nhận. Biết phần nào còn phải thu.",
@@ -155,58 +172,13 @@ const stages: {
   {
     name: "Nhìn lại mùa vụ",
     icon: "chart",
+    image: "season-review",
+    imageAlt: "Minh họa nhà vườn xem sổ ghi chép sau một mùa sầu riêng",
     headline: "Khép một vụ, hiểu vườn hơn.",
     description:
       "Xem tổng chi, giá trị bán và lãi theo số đã ghi. Giữ lại lịch sử cho mùa tiếp theo.",
     tools: ["Tổng quan mùa vụ", "Thu, chi & lãi đã ghi", "Lịch sử chăm sóc"],
   },
-];
-
-const features: {
-  icon: IconName;
-  title: string;
-  text: string;
-  className: string;
-}[] = [
-  {
-    icon: "book",
-    title: "Việc trong vườn, có chỗ ghi.",
-    text: "Nhật ký chăm sóc, vật tư và chi phí cùng gắn với một mùa vụ.",
-    className: "journal",
-  },
-  {
-    icon: "scan",
-    title: "Thấy dấu hiệu lạ? Quét ảnh.",
-    text: "Hỗ trợ nhận diện ngay trên điện thoại. Dùng ngoại tuyến sau khi tải mô hình.",
-    className: "scan",
-  },
-  {
-    icon: "wallet",
-    title: "Biết tiền đi đâu, về đâu.",
-    text: "Theo dõi chi phí, giao dịch bán, tiền cọc và khoản còn phải thu.",
-    className: "money",
-  },
-  {
-    icon: "chat",
-    title: "Có điều chưa rõ, có nơi hỏi.",
-    text: "Hỏi đáp có trích nguồn, tra cứu kiến thức, checklist và danh bạ chuyên gia.",
-    className: "knowledge",
-  },
-];
-
-const comparisons = [
-  ["Việc chăm cây", "Ghi rải rác, khó xem lại", "Nhật ký gắn với lô và vụ"],
-  [
-    "Dấu hiệu bất thường",
-    "Tìm ảnh, hỏi nhiều nơi",
-    "Quét ảnh, lưu lịch sử, tra cứu",
-  ],
-  [
-    "Thu chi",
-    "Nhớ khoản này, sót khoản kia",
-    "Chi phí, bán hàng và phải thu cùng chỗ",
-  ],
-  ["Cuối mùa", "Gom lại từng mẩu thông tin", "Xem tổng quan từ dữ liệu đã ghi"],
 ];
 
 function SeasonJourney() {
@@ -219,7 +191,7 @@ function SeasonJourney() {
       id="mua-vu"
       aria-labelledby="season-heading"
     >
-      <div className="lp-section-head">
+      <div className="lp-section-head" data-reveal="heading">
         <p className="lp-eyebrow">TỪ ĐẦU VỤ ĐẾN CUỐI MÙA</p>
         <h2 id="season-heading">
           Một mùa vụ.
@@ -228,7 +200,7 @@ function SeasonJourney() {
         </h2>
         <p>Chọn một chặng để xem app giúp gì.</p>
       </div>
-      <div className="lp-journey">
+      <div className="lp-journey" data-reveal="image">
         <div
           className="lp-stages"
           role="group"
@@ -260,17 +232,21 @@ function SeasonJourney() {
           aria-live="polite"
           aria-atomic="true"
         >
-          <div className="lp-season-art" aria-hidden="true">
-            <span className="lp-orbit lp-orbit-one" />
-            <span className="lp-orbit lp-orbit-two" />
-            <div className="lp-season-symbol" key={selected.name}>
-              <Icon name={selected.icon} />
-            </div>
+          <figure className="lp-season-art">
+            <img
+              key={selected.image}
+              src={`/landing/${selected.image}.webp`}
+              width="840"
+              height="560"
+              loading="lazy"
+              alt={selected.imageAlt}
+            />
             <span className="lp-season-number">
               0{active + 1}
               <span>/ 06</span>
             </span>
-          </div>
+            <figcaption>Ảnh minh họa</figcaption>
+          </figure>
           <div className="lp-stage-copy" key={active}>
             <span className="lp-detail-label">{selected.name}</span>
             <h3>{selected.headline}</h3>
@@ -292,8 +268,30 @@ function SeasonJourney() {
 
 export function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const pageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const page = pageRef.current;
+    if (!page || !("IntersectionObserver" in window)) return;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting || motion.matches) continue;
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.15 },
+    );
+    page
+      .querySelectorAll("[data-reveal]")
+      .forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="landing-page">
+    <div className="landing-page" ref={pageRef}>
       <a className="lp-skip" href="#noi-dung">
         Đến nội dung chính
       </a>
@@ -310,10 +308,10 @@ export function LandingPage() {
             type="button"
             aria-expanded={menuOpen}
             aria-controls="landing-nav"
+            aria-label={menuOpen ? "Đóng điều hướng" : "Mở điều hướng"}
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            {menuOpen ? "Đóng" : "Menu"}
-            <span aria-hidden="true">{menuOpen ? "×" : "☰"}</span>
+            <Icon name={menuOpen ? "close" : "menu"} />
           </button>
           <nav
             className={menuOpen ? "is-open" : ""}
@@ -322,7 +320,8 @@ export function LandingPage() {
             onClick={() => setMenuOpen(false)}
           >
             <a href="#mua-vu">Một mùa đồng hành</a>
-            <a href="#tinh-nang">Trong ứng dụng</a>
+            <a href="#khac-biet">Điểm khác biệt</a>
+            <a href="#tinh-nang">AI trong ứng dụng</a>
             <a href="#lo-trinh">Lộ trình</a>
             <a href="#tai-ung-dung" className="lp-button lp-button-small">
               Tải ứng dụng
@@ -345,8 +344,8 @@ export function LandingPage() {
               <span>sầu riêng.</span>
             </h1>
             <p className="lp-hero-description">
-              Từ chăm cây đến thu hoạch: ghi việc, nắm thu chi, tìm lời giải
-              ngay tại vườn.
+              Chăm cây, nắm thu chi, hỏi AI có nguồn. Ghi chép cùng vườn, lô và
+              mùa vụ.
             </p>
             <div className="lp-actions">
               <a className="lp-button" href="#mua-vu">
@@ -399,92 +398,8 @@ export function LandingPage() {
           <SeasonJourney />
         </div>
 
-        <section
-          className="lp-feature-section"
-          id="tinh-nang"
-          aria-labelledby="features-heading"
-        >
-          <div className="lp-container lp-section">
-            <div className="lp-section-head">
-              <h2 id="features-heading">
-                Chuyện nhà vườn,
-                <br />
-                gọn trong một ứng dụng.
-              </h2>
-              <p>
-                AI là một công cụ. Cả mùa vụ mới là điều chúng tôi đồng hành.
-              </p>
-            </div>
-            <div className="lp-feature-grid">
-              {features.map((feature) => (
-                <article
-                  className={`lp-feature lp-feature-${feature.className}`}
-                  key={feature.title}
-                >
-                  <Icon name={feature.icon} />
-                  <div>
-                    <h3>{feature.title}</h3>
-                    <p>{feature.text}</p>
-                  </div>
-                  <span className="lp-feature-line" aria-hidden="true" />
-                </article>
-              ))}
-            </div>
-            <p className="lp-feature-note">
-              Kết quả quét hỗ trợ tham khảo. Khi cần quyết định xử lý, hãy đối
-              chiếu hiện trạng và ý kiến chuyên gia.
-            </p>
-          </div>
-        </section>
-
-        <section
-          className="lp-container lp-section lp-comparison"
-          aria-labelledby="comparison-heading"
-        >
-          <div className="lp-section-head">
-            <h2 id="comparison-heading">
-              Bớt rời rạc.
-              <br />
-              Thêm rõ ràng.
-            </h2>
-            <p>Từ nhiều nơi ghi nhớ, về cùng một mùa vụ.</p>
-          </div>
-          <div
-            className="lp-compare-table"
-            role="table"
-            aria-label="So sánh cách theo dõi công việc"
-          >
-            <div className="lp-compare-row lp-compare-head" role="row">
-              <span role="columnheader">Chuyện cần nắm</span>
-              <span role="columnheader">Khi thông tin rời rạc</span>
-              <span role="columnheader">
-                <img
-                  src="/landing/app-icon.webp"
-                  alt=""
-                  width="28"
-                  height="28"
-                />
-                Với Sầu Riêng AI
-              </span>
-            </div>
-            {comparisons.map(([topic, before, after]) => (
-              <div className="lp-compare-row" role="row" key={topic}>
-                <strong role="rowheader">{topic}</strong>
-                <span role="cell" className="lp-before">
-                  <span className="lp-mobile-label">Rời rạc</span>
-                  {before}
-                </span>
-                <span role="cell" className="lp-after">
-                  <Icon name="check" />
-                  <span>
-                    <span className="lp-mobile-label">Cùng một mùa vụ</span>
-                    {after}
-                  </span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+        <ProductDifference />
+        <AiSpotlight />
 
         <section
           className="lp-roadmap-section"
@@ -500,7 +415,7 @@ export function LandingPage() {
                 Đi xa cùng nhiều vườn.
               </h2>
             </div>
-            <ol className="lp-roadmap">
+            <ol className="lp-roadmap" data-reveal="list">
               <li className="lp-roadmap-current">
                 <span className="lp-roadmap-point" />
                 <span className="lp-roadmap-status">Đã có trong ứng dụng</span>
@@ -532,7 +447,7 @@ export function LandingPage() {
               Các bước tiếp theo là định hướng phát triển, sẽ điều chỉnh qua thử
               nghiệm thực tế với nhà vườn.
             </p>
-            <div className="lp-business">
+            <div className="lp-business" data-reveal="flow">
               <div>
                 <span className="lp-detail-label">
                   Định hướng thương mại hóa
@@ -592,7 +507,11 @@ export function LandingPage() {
               <Icon name="arrow" />
             </a>
           </div>
-          <div className="lp-platforms" aria-label="Trạng thái phát hành">
+          <div
+            className="lp-platforms"
+            data-reveal="image"
+            aria-label="Trạng thái phát hành"
+          >
             <div>
               <Icon name="phone" />
               <span>
@@ -626,10 +545,6 @@ export function LandingPage() {
           <nav aria-label="Thông tin và hỗ trợ">
             <a href="/privacy/">Quyền riêng tư</a>
             <a href="/support/">Hỗ trợ</a>
-            <a href="/admin/">
-              Quản trị viên
-              <Icon name="arrow" />
-            </a>
           </nav>
         </div>
       </footer>
