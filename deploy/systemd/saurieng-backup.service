@@ -1,0 +1,8 @@
+[Unit]
+Description=Sau Rieng AI backup (Mongo, MinIO, secrets)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/saurieng-ai/repo/deploy/backup.sh
