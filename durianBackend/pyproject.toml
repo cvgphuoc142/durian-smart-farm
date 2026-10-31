@@ -41,3 +41,8 @@ plugins = ["pydantic.mypy"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = ["integration: needs a real MongoDB replica set (docker)"]
+
+[tool.uv]
+# The production VPS exposes a baseline x86-64 CPU (no SSE4/AVX). NumPy 2.4+ needs
+# x86-64-v2, so keep it below that until the server CPU changes.
+constraint-dependencies = ["numpy<2.4"]
