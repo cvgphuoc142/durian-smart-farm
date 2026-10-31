@@ -29,9 +29,13 @@ NEW_RELEASE=$(git rev-parse --short=10 HEAD)
 PREV_RELEASE=$RELEASE
 log "release $NEW_RELEASE (previous: $PREV_RELEASE)"
 
-# --- Backup before anything touches data (skipped on the very first run)
-if docker volume inspect saurieng_ai_mongo_data >/dev/null 2>&1 && [ -n "$(dc ps -q mongo)" ]; then
+# --- Backup before anything touches data. Skipped when Mongo is not running healthy
+# (first install, or already down): there is no consistent data to dump then.
+MONGO_ID=$(dc ps -q mongo 2>/dev/null || true)
+if [ -n "$MONGO_ID" ] && [ "$(docker inspect -f '{{.State.Health.Status}}' "$MONGO_ID")" = healthy ]; then
   bash "$REPO_DIR/deploy/backup.sh"
+else
+  log "WARNING: mongo not running healthy, backup skipped"
 fi
 
 # --- MinIO's Chainguard image runs as uid 65532 and cannot write a root-owned volume.
