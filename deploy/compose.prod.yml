@@ -22,9 +22,9 @@ services:
       test:
         - CMD-SHELL
         - >
-          mongo --quiet --eval "try { rs.status().ok } catch (e) {
-          rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"
-          && mongo --quiet --eval "if (!db.isMaster().ismaster) quit(1)"
+          mongo --quiet --eval "if (!rs.status().ok)
+          rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]});
+          if (!db.isMaster().ismaster) quit(1)"
       interval: 5s
       timeout: 10s
       retries: 30
