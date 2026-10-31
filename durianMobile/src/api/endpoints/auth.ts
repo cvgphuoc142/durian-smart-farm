@@ -11,8 +11,12 @@ export interface DeleteAccountResult {
 
 /** Wire contract: `durianBackend/openapi.json` (`authExchange`, `logout`, `getMe`, `setLocale`, `setAiConsent`, `deleteAccount`). */
 export const authApi = {
-  exchange: (provider: AuthProvider, idToken: string) =>
-    http.post<Session>('/v1/auth/session', { provider, id_token: idToken }),
+  exchange: (provider: AuthProvider, idToken: string, displayName?: string) =>
+    http.post<Session>('/v1/auth/session', {
+      provider,
+      id_token: idToken,
+      ...(displayName ? { display_name: displayName } : {}),
+    }),
   /** Revokes the calling session (204). */
   logout: () => http.post<void>('/v1/auth/logout'),
   me: () => http.get<Me>('/v1/me'),

@@ -15,6 +15,12 @@ export class SignInCancelled extends Error {
   }
 }
 
+export interface ProviderCredential {
+  idToken: string;
+  /** Apple only, and only on the first sign-in: its ID token carries no name. */
+  displayName?: string;
+}
+
 /**
  * Asks Google or Apple for an ID token that `POST /v1/auth/session` exchanges for a session.
  *
@@ -22,12 +28,14 @@ export class SignInCancelled extends Error {
  * (iOS only). Both need a dev build, not Expo Go. This function is the single place the app
  * touches a provider SDK.
  */
-export async function getProviderToken(provider: AuthProvider): Promise<string> {
-  if (USE_MOCK) return 'dev';
-  if (provider === 'apple') return getAppleToken();
-  if (provider === 'google' && GOOGLE_WEB_CLIENT_ID) return getGoogleToken(GOOGLE_WEB_CLIENT_ID);
+export async function getProviderCredential(provider: AuthProvider): Promise<ProviderCredential> {
+  if (USE_MOCK) return { idToken: 'dev' };
+  if (provider === 'apple') return getAppleCredential();
+  if (provider === 'google' && GOOGLE_WEB_CLIENT_ID) {
+    return { idToken: await getGoogleToken(GOOGLE_WEB_CLIENT_ID) };
+  }
   // Backend with APP_ENV=dev accepts `dev:<subject>[:<name>]` (`dev:demo` is the seeded household).
-  if (__DEV__ && DEV_ID_TOKEN) return DEV_ID_TOKEN;
+  if (__DEV__ && DEV_ID_TOKEN) return { idToken: DEV_ID_TOKEN };
   throw new Error('auth_not_configured');
 }
 
@@ -40,7 +48,7 @@ async function getGoogleToken(webClientId: string): Promise<string> {
   throw new Error('auth_failed');
 }
 
-async function getAppleToken(): Promise<string> {
+async function getAppleCredential(): Promise<ProviderCredential> {
   try {
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
@@ -48,7 +56,11 @@ async function getAppleToken(): Promise<string> {
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
       ],
     });
-    if (credential.identityToken) return credential.identityToken;
+    if (credential.identityToken) {
+      const { givenName, familyName } = credential.fullName ?? {};
+      const displayName = [givenName, familyName].filter(Boolean).join(' ');
+      return { idToken: credential.identityToken, displayName: displayName || undefined };
+    }
   } catch (e) {
     if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') throw new SignInCancelled();
     throw e;

@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 
 import { authApi, queryClient, syncApi } from '@/api';
-import { getProviderToken } from '@/services/authProvider';
+import { getProviderCredential } from '@/services/authProvider';
 import { unregisterModelPush } from '@/services/pushRegistration';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/stores/chatStore';
@@ -21,8 +21,8 @@ import { contextFromSnapshot } from './snapshot';
 export function useSignIn() {
   return useMutation({
     mutationFn: async ({ provider }: { provider: AuthProvider }) => {
-      const idToken = await getProviderToken(provider);
-      const session = await authApi.exchange(provider, idToken);
+      const { idToken, displayName } = await getProviderCredential(provider);
+      const session = await authApi.exchange(provider, idToken, displayName);
       await useAuthStore.getState().signIn(session);
       // The language chosen on SC-01 follows the account. Best effort: it never blocks sign-in.
       const locale = useSettingsStore.getState().locale;
