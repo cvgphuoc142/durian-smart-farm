@@ -18,8 +18,8 @@ import {
   Text,
 } from '@/components/ui';
 import { useFormat, useRows, useScanTimeline, useWrite } from '@/hooks';
-import { useAppNavigation } from '@/navigation';
 import type { RootStackParamList } from '@/navigation/types';
+import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
 import { money } from '@/utils';
 

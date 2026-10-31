@@ -18,7 +18,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { useLocalScans, useRunContext, useScanModels } from '@/hooks';
-import { useAppNavigation } from '@/navigation';
+import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { startScan } from '@/sync';
 import { colors, radius, spacing } from '@/theme';
 

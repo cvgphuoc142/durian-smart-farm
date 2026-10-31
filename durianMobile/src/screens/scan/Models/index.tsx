@@ -32,7 +32,7 @@ import {
   useModelUpdates,
   useRequireOnline,
 } from '@/hooks';
-import { useAppNavigation } from '@/navigation';
+import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
 
 /**

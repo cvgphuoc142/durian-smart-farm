@@ -17,7 +17,7 @@ import {
 } from '@/components/ui';
 import { scanRepo } from '@/db';
 import { useFormat, useIsOnline, useLocalScans, usePartLabel } from '@/hooks';
-import { useAppNavigation } from '@/navigation';
+import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { discardScan, requestSync } from '@/sync';
 import { spacing } from '@/theme';
 import type { LocalScan } from '@/types';

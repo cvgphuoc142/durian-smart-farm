@@ -20,8 +20,8 @@ import {
   useToast,
 } from '@/components/ui';
 import { useFormat, useIsOnline, useLocalScan, useLocalScans, useScanTargets } from '@/hooks';
-import { useAppNavigation } from '@/navigation';
 import type { RootStackParamList } from '@/navigation/types';
+import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useAppContext } from '@/stores';
 import { requestSync, saveScan, type CaseChoice } from '@/sync';
 import { spacing } from '@/theme';

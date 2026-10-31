@@ -157,6 +157,7 @@ EXPO_PUBLIC_DEV_ID_TOKEN=dev:demo
 - Với iOS Simulator, `API_URL` có thể là `http://localhost:8000`. Với Android Emulator dùng `http://10.0.2.2:8000`. Với điện thoại thật, dùng IP LAN của máy và để máy tính và điện thoại chung Wi-Fi.
 - `EXPO_PUBLIC_DEV_ID_TOKEN=dev:demo` cho đăng nhập thẳng bằng hộ demo, không cần Google (backend phải có `APP_ENV=dev`).
 - Đăng nhập Google thật: điền `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` và `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` lấy từ Google Cloud Console. ID web cũng phải nằm trong `GOOGLE_CLIENT_IDS` của backend.
+- Cấu hình đăng nhập Apple, Google cho bản phát hành (tài khoản Apple, Google Cloud, backend, EAS): xem [docs/dang-nhap-apple-google-setup.md](docs/dang-nhap-apple-google-setup.md).
 
 Sau khi sửa `.env`, tắt Metro và chạy lại với `npx expo start -c` để xoá cache.
 

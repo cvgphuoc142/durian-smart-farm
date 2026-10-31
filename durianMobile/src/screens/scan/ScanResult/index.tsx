@@ -24,8 +24,8 @@ import {
   useRunContext,
   useScanEntry,
 } from '@/hooks';
-import { useAppNavigation } from '@/navigation';
 import type { RootStackParamList } from '@/navigation/types';
+import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { discardScan, rerunDraft } from '@/sync';
 import { spacing } from '@/theme';
 

@@ -15,7 +15,7 @@ import {
   Text,
 } from '@/components/ui';
 import { live, useScanTimeline, useSelection, useSnapshot } from '@/hooks';
-import { useAppNavigation } from '@/navigation';
+import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { spacing } from '@/theme';
 
 type Tab = 'cases' | 'scans';
