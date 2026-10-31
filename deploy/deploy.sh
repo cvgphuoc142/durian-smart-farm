@@ -44,6 +44,10 @@ if ! docker volume inspect saurieng_ai_minio_data >/dev/null 2>&1; then
   docker run --rm -v saurieng_ai_minio_data:/data alpine:3.20 chown 65532:65532 /data
 fi
 
+# --- MinIO image: built from source once, reused afterwards (see deploy/minio/Dockerfile)
+MINIO_IMAGE=$(dc config --images minio)
+docker image inspect "$MINIO_IMAGE" >/dev/null 2>&1 || dc build minio
+
 # --- Build API image and admin web for this commit
 export RELEASE=$NEW_RELEASE
 dc build api
