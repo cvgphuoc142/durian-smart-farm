@@ -15,8 +15,8 @@ from app.schemas.entities import (
     SalePaymentRow,
     SaleRow,
     ScanRow,
-    SelfCheckRow,
     SeasonRow,
+    SelfCheckRow,
 )
 
 EntityName = Literal[

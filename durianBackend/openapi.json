@@ -2800,6 +2800,18 @@
             "type": "string",
             "minLength": 1,
             "title": "Id Token"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
           }
         },
         "additionalProperties": false,
@@ -4939,6 +4951,103 @@
         ],
         "title": "Season"
       },
+      "SelfCheck": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "season_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Season Id"
+          },
+          "standard_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Standard Version Id"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/SelfCheckAnswerWrite"
+            },
+            "type": "array",
+            "title": "Answers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "season_id",
+          "standard_version_id",
+          "answers"
+        ],
+        "title": "SelfCheck"
+      },
+      "SelfCheckAnswerWrite": {
+        "properties": {
+          "standard_item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Standard Item Id"
+          },
+          "checked": {
+            "type": "boolean",
+            "title": "Checked"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "standard_item_id",
+          "checked"
+        ],
+        "title": "SelfCheckAnswerWrite"
+      },
       "Snapshot": {
         "properties": {
           "as_of": {
@@ -5019,8 +5128,7 @@
           },
           "self_checks": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SelfCheck"
             },
             "type": "array",
             "title": "Self Checks"
@@ -5038,7 +5146,8 @@
           "sale_payments",
           "disease_cases",
           "media_assets",
-          "scans"
+          "scans",
+          "self_checks"
         ],
         "title": "Snapshot"
       },

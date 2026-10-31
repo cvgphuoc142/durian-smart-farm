@@ -360,7 +360,11 @@ def test_self_check_tick_and_untick(api: TestClient, replset_uri: str) -> None:
         }
     )
     sc = uid()
-    tick = {"standard_item_id": str(item1), "checked": True, "checked_at": "2026-10-30T01:02:03.000Z"}
+    tick = {
+        "standard_item_id": str(item1),
+        "checked": True,
+        "checked_at": "2026-10-30T01:02:03.000Z",
+    }
     data = {"season_id": ids["season"], "standard_version_id": str(version), "answers": [tick]}
     row = f.rows(f.ok(upsert("self_check", sc, data)))[0]
     assert row["revision"] == 1 and row["answers"][0]["checked"] is True

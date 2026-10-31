@@ -39,6 +39,18 @@ def test_same_subject_same_user_providers_never_merge(auth_api: TestClient) -> N
     assert apple["user"]["id"] != a1["user"]["id"]
 
 
+def test_apple_name_comes_from_the_request(auth_api: TestClient) -> None:
+    r = auth_api.post(
+        "/v1/auth/session",
+        json={"provider": "apple", "id_token": "dev:ap1", "display_name": " Lan Nguyen "},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["display_name"] == "Lan Nguyen"
+    # a later sign-in without the name (Apple only sends it once) keeps it
+    again = auth_api.post("/v1/auth/session", json={"provider": "apple", "id_token": "dev:ap1"})
+    assert again.json()["user"]["display_name"] == "Lan Nguyen"
+
+
 def test_missing_bad_token_is_401(auth_api: TestClient) -> None:
     assert auth_api.get("/v1/me").status_code == 401
     r = auth_api.get("/v1/me", headers={"Authorization": "Bearer nope"})

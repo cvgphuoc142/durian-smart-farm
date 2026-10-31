@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -22,6 +23,8 @@ class AuthSessionRequest(BaseModel):
 
     provider: Literal["google", "apple"]
     id_token: str = Field(..., min_length=1)
+    # Apple leaves the name out of the id_token and gives it to the app on first sign-in only.
+    display_name: str | None = Field(default=None, max_length=100)
 
 
 @router.post("/session", operation_id="authExchange")
@@ -36,6 +39,9 @@ async def exchange(
     demo household is `dev:demo`.
     """
     ident = await request.app.state.verifier.verify(body.provider, body.id_token)
+    name = (body.display_name or "").strip()
+    if body.provider == "apple" and name and not ident.display_name:
+        ident = replace(ident, display_name=name)
     user = await store.upsert_user(db, ident)
     token = await store.create_session(db, user["_id"], request.app.state.settings.session_ttl_days)
     return {"token": token, "user": store.user_wire(user)}

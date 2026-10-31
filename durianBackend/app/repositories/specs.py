@@ -95,5 +95,16 @@ SELF_CHECK = EntitySpec(
 
 SPECS: dict[str, EntitySpec] = {
     s.name: s
-    for s in (FARM, PLOT, SEASON, CARE_LOG, EXPENSE, SALE, SALE_PAYMENT, DISEASE_CASE, SCAN, SELF_CHECK)
+    for s in (
+        FARM,
+        PLOT,
+        SEASON,
+        CARE_LOG,
+        EXPENSE,
+        SALE,
+        SALE_PAYMENT,
+        DISEASE_CASE,
+        SCAN,
+        SELF_CHECK,
+    )
 }
