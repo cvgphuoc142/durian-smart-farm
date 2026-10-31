@@ -44,7 +44,9 @@ export function Login({ onDone }: { onDone: (who: string) => void }) {
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
-          <p className="muted small">Dev seed account: admin / 123456 (run <code>make seed</code> in durianBackend).</p>
+          {import.meta.env.DEV && (
+            <p className="muted small">Dev seed account: admin / 123456 (run <code>make seed</code> in durianBackend).</p>
+          )}
         </Form>
       </div>
     </div>
